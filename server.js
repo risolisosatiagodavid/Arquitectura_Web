@@ -1,4 +1,4 @@
-const http = require('node:http');
+import * as http from 'node:http';
 
 const PORT = 8080;
 

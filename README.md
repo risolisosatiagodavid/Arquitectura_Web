@@ -7,7 +7,7 @@ Repositorio central para el desarrollo del Trabajo Práctico Integrador de la ma
 ## Tecnologías y Entorno
 - **Runtime:** Node.js (LTS)
 - **Lenguaje:** JavaScript / TypeScript
-- **Entorno de desarrollo:** Ubuntu 24.04 LTS en WSL2
+- **Entorno de desarrollo:** Ubuntu 26.04 LTS en WSL2
 
 ---
 

@@ -13,18 +13,21 @@ Repositorio central para el desarrollo del Trabajo Práctico Integrador de la ma
 
 ## Entregas y Modulos
 
-- 1. **Servidor HTTP:** Servidor implementado utilizando el modulo node:http sin utilizar frameworks externos, con los siguientes endpoints:
-     ```http
-     GET /            //Retorna 'Servidor HTTP funcionando correctamente'
-     POST /archivo    //Retorna la cantidad de bytes del archivo
-     ```
-     * Cualquier otra ruta o método retorna 404
+ ### 1. **Servidor HTTP:** Servidor implementado utilizando el modulo node:http sin utilizar frameworks externos, con los siguientes endpoints:
+
+
+```http
+GET /            //Retorna 'Servidor HTTP funcionando correctamente'
+POST /archivo    //Retorna la cantidad de bytes del archivo
+```
+* Cualquier otra ruta o método retorna 404
+     
 <br>
 
   *   **Ejecución**
-      ```bash
-      node server.js
-      ```
+```bash
+node server.js
+```
 <br>
 
 * **Pruebas**

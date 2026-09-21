@@ -1,4 +1,5 @@
-import type { CreateStoreInput, Store, UpdateStoreInput } from '../types/store.js';
+import type { Store } from '../models/store.model.js';
+import type { CreateStoreInput, UpdateStoreInput } from '../types/store.js';
 
 const stores: Store[] = [];
 let nextStoreId = 1;

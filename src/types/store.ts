@@ -1,15 +1,6 @@
-export type StoreVisibility = 'publica' | 'privada';
+import type { StoreVisibility } from '../models/store.model.js';
 
-export interface Store {
-  id: number;
-  storename: string;
-  descripcion: string;
-  owner: number;
-  visibilidad: StoreVisibility;
-  zona?: string;
-  categoria?: string;
-  telefono?: string;
-}
+export type { StoreVisibility } from '../models/store.model.js';
 
 export interface CreateStoreInput {
   storename: string;

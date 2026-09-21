@@ -1,6 +1,7 @@
 import argon2 from 'argon2';
 
-import type { RegisterUserInput, UpdateUserInput, User } from '../types/user.js';
+import type { User } from '../models/user.model.js';
+import type { RegisterUserInput, UpdateUserInput } from '../types/user.js';
 
 const users: User[] = [];
 let nextUserId = 1;

@@ -2,13 +2,18 @@ import type { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 
 import { env } from '../config/env.js';
-import { authenticateUser, registerUser } from '../services/user.service.js';
+import { authenticateUser, findUserByEmail, registerUser } from '../services/user.service.js';
 
 export const register = async (request: Request, response: Response) => {
   const { nombre, email, password, domicilio } = request.body ?? {};
 
   if (![nombre, email, password, domicilio].every((value) => typeof value === 'string' && value.trim())) {
     response.status(400).json({ error: 'nombre, email, password y domicilio son requeridos' });
+    return;
+  }
+
+  if (await findUserByEmail(email)) {
+    response.status(409).json({ error: 'El email ya esta registrado' });
     return;
   }
 

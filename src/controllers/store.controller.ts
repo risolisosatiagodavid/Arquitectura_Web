@@ -24,7 +24,7 @@ const parseStoreId = (value: unknown) => {
   return Number.isInteger(id) && id > 0 ? id : undefined;
 };
 
-export const list = (request: Request, response: Response) => {
+export const list = async (request: Request, response: Response) => {
   const { nombre, zona, categoria } = request.query;
   const filters = {
     ...(typeof nombre === 'string' && { nombre }),
@@ -37,12 +37,12 @@ export const list = (request: Request, response: Response) => {
     return;
   }
 
-  response.json(listStores(filters));
+  response.json(await listStores(filters));
 };
 
-export const getById = (request: Request, response: Response) => {
+export const getById = async (request: Request, response: Response) => {
   const storeId = parseStoreId(request.params.id);
-  const store = storeId ? findStoreById(storeId) : undefined;
+  const store = storeId ? await findStoreById(storeId) : undefined;
 
   if (!store) {
     response.status(404).json({ error: 'Tienda no encontrada' });
@@ -57,7 +57,7 @@ export const getById = (request: Request, response: Response) => {
   response.json(store);
 };
 
-export const create = (request: Request, response: Response) => {
+export const create = async (request: Request, response: Response) => {
   const { storename, descripcion, owner, visibilidad, zona, categoria, telefono } = request.body ?? {};
   const authenticatedUser = request.authenticatedUser;
 
@@ -75,12 +75,12 @@ export const create = (request: Request, response: Response) => {
     return;
   }
 
-  if (findStoreByName(storename.trim())) {
+  if (await findStoreByName(storename.trim())) {
     response.status(409).json({ error: 'Ya existe una tienda con ese nombre' });
     return;
   }
 
-  const store = createStore({
+  const store = await createStore({
     storename: storename.trim(),
     descripcion: descripcion.trim(),
     owner,
@@ -93,9 +93,9 @@ export const create = (request: Request, response: Response) => {
   response.status(201).json(store);
 };
 
-export const update = (request: Request, response: Response) => {
+export const update = async (request: Request, response: Response) => {
   const storeId = parseStoreId(request.params.id);
-  const store = storeId ? findStoreById(storeId) : undefined;
+  const store = storeId ? await findStoreById(storeId) : undefined;
 
   if (!store) {
     response.status(404).json({ error: 'Tienda no encontrada' });
@@ -120,12 +120,12 @@ export const update = (request: Request, response: Response) => {
     return;
   }
 
-  response.json(updateStore(store, fields));
+  response.json(await updateStore(store.id, fields));
 };
 
-export const remove = (request: Request, response: Response) => {
+export const remove = async (request: Request, response: Response) => {
   const storeId = parseStoreId(request.params.id);
-  const store = storeId ? findStoreById(storeId) : undefined;
+  const store = storeId ? await findStoreById(storeId) : undefined;
 
   if (!store) {
     response.status(404).json({ error: 'Tienda no encontrada' });
@@ -137,6 +137,6 @@ export const remove = (request: Request, response: Response) => {
     return;
   }
 
-  deleteStore(store);
+  await deleteStore(store.id);
   response.status(204).send();
 };

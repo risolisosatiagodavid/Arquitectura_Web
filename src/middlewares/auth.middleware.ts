@@ -1,11 +1,17 @@
 import type { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
+import 'dotenv/config';
 
-import { env } from '../config/env.js';
 import { findUserById } from '../services/user.service.js';
 
 const authenticateRequest = async (request: Request, token: string) => {
-  const payload = jwt.verify(token, env.jwtSecret);
+  const jwtSecret = process.env.JWT_SECRET;
+
+  if (!jwtSecret) {
+    throw new Error('JWT_SECRET no esta configurado');
+  }
+
+  const payload = jwt.verify(token, jwtSecret);
   const userId = typeof payload === 'object' && payload !== null ? payload.sub : undefined;
   const user = userId ? await findUserById(Number(userId)) : undefined;
 

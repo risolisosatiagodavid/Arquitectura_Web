@@ -1,18 +1,19 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import 'dotenv/config';
 import DatabaseDriver from 'better-sqlite3';
 import { Kysely, SqliteDialect, sql } from 'kysely';
 
-import { env } from './env.js';
 import type { Database } from '../models/store.model.js';
 
-const databaseDirectory = path.dirname(env.databasePath);
+const databasePath = process.env.DB_PATH ?? 'data/arqweb.sqlite';
+const databaseDirectory = path.dirname(databasePath);
 fs.mkdirSync(databaseDirectory, { recursive: true });
 
 export const db = new Kysely<Database>({
   dialect: new SqliteDialect({
-    database: new DatabaseDriver(env.databasePath),
+    database: new DatabaseDriver(databasePath),
   }),
 });
 

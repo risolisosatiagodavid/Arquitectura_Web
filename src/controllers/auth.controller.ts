@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
+import 'dotenv/config';
 
-import { env } from '../config/env.js';
 import { authenticateUser, findUserByEmail, registerUser } from '../services/user.service.js';
 
 export const register = async (request: Request, response: Response) => {
@@ -42,5 +42,12 @@ export const login = async (request: Request, response: Response) => {
     return;
   }
 
-  response.json({ token: jwt.sign({ sub: user.id }, env.jwtSecret) });
+  const jwtSecret = process.env.JWT_SECRET;
+
+  if (!jwtSecret) {
+    response.status(500).json({ error: 'JWT_SECRET no esta configurado' });
+    return;
+  }
+
+  response.json({ token: jwt.sign({ sub: user.id }, jwtSecret) });
 };

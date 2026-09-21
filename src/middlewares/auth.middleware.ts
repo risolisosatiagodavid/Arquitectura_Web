@@ -4,6 +4,18 @@ import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { findUserById } from '../services/user.service.js';
 
+const authenticateRequest = (request: Request, token: string) => {
+  const payload = jwt.verify(token, env.jwtSecret);
+  const userId = typeof payload === 'object' && payload !== null ? payload.sub : undefined;
+  const user = userId ? findUserById(Number(userId)) : undefined;
+
+  if (user) {
+    request.authenticatedUser = user;
+  }
+
+  return user;
+};
+
 export const requireAuth = (request: Request, response: Response, next: NextFunction) => {
   const authorization = request.header('authorization');
   const token = authorization?.startsWith('Bearer ') ? authorization.slice(7) : undefined;
@@ -14,9 +26,7 @@ export const requireAuth = (request: Request, response: Response, next: NextFunc
   }
 
   try {
-    const payload = jwt.verify(token, env.jwtSecret);
-    const userId = typeof payload === 'object' && payload !== null ? payload.sub : undefined;
-    const user = userId ? findUserById(Number(userId)) : undefined;
+    const user = authenticateRequest(request, token);
 
     if (!user) {
       response.status(401).json({ error: 'Token invalido' });
@@ -24,6 +34,27 @@ export const requireAuth = (request: Request, response: Response, next: NextFunc
     }
 
     request.authenticatedUser = user;
+    next();
+  } catch {
+    response.status(401).json({ error: 'Token invalido' });
+  }
+};
+
+export const optionalAuth = (request: Request, response: Response, next: NextFunction) => {
+  const authorization = request.header('authorization');
+  const token = authorization?.startsWith('Bearer ') ? authorization.slice(7) : undefined;
+
+  if (!token) {
+    next();
+    return;
+  }
+
+  try {
+    if (!authenticateRequest(request, token)) {
+      response.status(401).json({ error: 'Token invalido' });
+      return;
+    }
+
     next();
   } catch {
     response.status(401).json({ error: 'Token invalido' });

@@ -2,9 +2,9 @@ import type { Request, Response } from 'express';
 
 import { findUserById, updateUser } from '../services/user.service.js';
 
-export const getById = (request: Request, response: Response) => {
+export const getById = async (request: Request, response: Response) => {
   const userId = Number(request.params.id);
-  const user = findUserById(userId);
+  const user = await findUserById(userId);
 
   if (!user) {
     response.status(404).json({ error: 'Usuario no encontrado' });
@@ -20,9 +20,9 @@ export const getById = (request: Request, response: Response) => {
   response.json(publicUser);
 };
 
-export const update = (request: Request, response: Response) => {
+export const update = async (request: Request, response: Response) => {
   const userId = Number(request.params.id);
-  const user = findUserById(userId);
+  const user = await findUserById(userId);
 
   if (!user) {
     response.status(404).json({ error: 'Usuario no encontrado' });
@@ -42,5 +42,5 @@ export const update = (request: Request, response: Response) => {
     return;
   }
 
-  response.json(updateUser(user, fields));
+  response.json(await updateUser(user.id, fields));
 };

@@ -1,13 +1,19 @@
 import type { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
+import 'dotenv/config';
 
-import { env } from '../config/env.js';
 import { findUserById } from '../services/user.service.js';
 
-const authenticateRequest = (request: Request, token: string) => {
-  const payload = jwt.verify(token, env.jwtSecret);
+const authenticateRequest = async (request: Request, token: string) => {
+  const jwtSecret = process.env.JWT_SECRET;
+
+  if (!jwtSecret) {
+    throw new Error('JWT_SECRET no esta configurado');
+  }
+
+  const payload = jwt.verify(token, jwtSecret);
   const userId = typeof payload === 'object' && payload !== null ? payload.sub : undefined;
-  const user = userId ? findUserById(Number(userId)) : undefined;
+  const user = userId ? await findUserById(Number(userId)) : undefined;
 
   if (user) {
     request.authenticatedUser = user;
@@ -16,7 +22,7 @@ const authenticateRequest = (request: Request, token: string) => {
   return user;
 };
 
-export const requireAuth = (request: Request, response: Response, next: NextFunction) => {
+export const requireAuth = async (request: Request, response: Response, next: NextFunction) => {
   const authorization = request.header('authorization');
   const token = authorization?.startsWith('Bearer ') ? authorization.slice(7) : undefined;
 
@@ -26,7 +32,7 @@ export const requireAuth = (request: Request, response: Response, next: NextFunc
   }
 
   try {
-    const user = authenticateRequest(request, token);
+    const user = await authenticateRequest(request, token);
 
     if (!user) {
       response.status(401).json({ error: 'Token invalido' });
@@ -40,7 +46,7 @@ export const requireAuth = (request: Request, response: Response, next: NextFunc
   }
 };
 
-export const optionalAuth = (request: Request, response: Response, next: NextFunction) => {
+export const optionalAuth = async (request: Request, response: Response, next: NextFunction) => {
   const authorization = request.header('authorization');
   const token = authorization?.startsWith('Bearer ') ? authorization.slice(7) : undefined;
 
@@ -50,7 +56,7 @@ export const optionalAuth = (request: Request, response: Response, next: NextFun
   }
 
   try {
-    if (!authenticateRequest(request, token)) {
+    if (!await authenticateRequest(request, token)) {
       response.status(401).json({ error: 'Token invalido' });
       return;
     }

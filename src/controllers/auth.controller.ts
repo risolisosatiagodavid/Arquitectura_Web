@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { authenticateUser, registerUser } from '../services/user.service.js';
 
-export const register = (request: Request, response: Response) => {
+export const register = async (request: Request, response: Response) => {
   const { nombre, email, password, domicilio } = request.body ?? {};
 
   if (![nombre, email, password, domicilio].every((value) => typeof value === 'string' && value.trim())) {
@@ -12,7 +12,7 @@ export const register = (request: Request, response: Response) => {
     return;
   }
 
-  const user = registerUser({ nombre, email, password, domicilio });
+  const user = await registerUser({ nombre, email, password, domicilio });
 
   if (!user) {
     response.status(409).json({ error: 'El email ya esta registrado' });
@@ -22,7 +22,7 @@ export const register = (request: Request, response: Response) => {
   response.status(201).json(user);
 };
 
-export const login = (request: Request, response: Response) => {
+export const login = async (request: Request, response: Response) => {
   const { email, password } = request.body ?? {};
 
   if (typeof email !== 'string' || typeof password !== 'string' || !email.trim() || !password) {
@@ -30,7 +30,7 @@ export const login = (request: Request, response: Response) => {
     return;
   }
 
-  const user = authenticateUser(email, password);
+  const user = await authenticateUser(email, password);
 
   if (!user) {
     response.status(401).json({ error: 'Credenciales invalidas' });

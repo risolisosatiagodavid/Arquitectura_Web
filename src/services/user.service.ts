@@ -1,16 +1,13 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
+import argon2 from 'argon2';
 
 import type { RegisterUserInput, UpdateUserInput, User } from '../types/user.js';
 
 const users: User[] = [];
 let nextUserId = 1;
 
-const hashPassword = (password: string): string =>
-  createHash('sha256').update(password).digest('hex');
-
 const toPublicUser = ({ passwordHash: _passwordHash, ...user }: User) => user;
 
-export const registerUser = (input: RegisterUserInput) => {
+export const registerUser = async (input: RegisterUserInput) => {
   const normalizedEmail = input.email.trim().toLowerCase();
 
   if (users.some((user) => user.email === normalizedEmail)) {
@@ -21,7 +18,7 @@ export const registerUser = (input: RegisterUserInput) => {
     id: nextUserId++,
     nombre: input.nombre.trim(),
     email: normalizedEmail,
-    passwordHash: hashPassword(input.password),
+    passwordHash: await argon2.hash(input.password),
     domicilio: input.domicilio.trim(),
   };
 
@@ -29,19 +26,14 @@ export const registerUser = (input: RegisterUserInput) => {
   return toPublicUser(user);
 };
 
-export const authenticateUser = (email: string, password: string) => {
+export const authenticateUser = async (email: string, password: string) => {
   const user = users.find((candidate) => candidate.email === email.trim().toLowerCase());
 
   if (!user) {
     return undefined;
   }
 
-  const expectedHash = Buffer.from(user.passwordHash, 'hex');
-  const receivedHash = Buffer.from(hashPassword(password), 'hex');
-
-  return expectedHash.length === receivedHash.length && timingSafeEqual(expectedHash, receivedHash)
-    ? user
-    : undefined;
+  return await argon2.verify(user.passwordHash, password) ? user : undefined;
 };
 
 export const findUserById = (id: number) => users.find((user) => user.id === id);

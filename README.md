@@ -9,6 +9,49 @@ Repositorio central para el desarrollo del Trabajo Práctico Integrador de la ma
 - **Lenguaje:** JavaScript / TypeScript
 - **Entorno de desarrollo:** Ubuntu 26.04 LTS en WSL2
 
+## Ejecución con Docker
+
+La imagen usa tres etapas: `builder` compila TypeScript y las dependencias nativas; `development` corre con Node como usuario no root; y `production` usa una imagen Distroless con solo los archivos compilados y dependencias de producción.
+
+Crear un archivo `.env` en la raíz del proyecto:
+
+```env
+PORT=8080
+JWT_SECRET=una-clave-aleatoria-larga
+DB_PATH=data/arqweb.sqlite
+```
+
+No subir `.env` al repositorio. Para generar un secreto JWT, se puede usar `openssl rand -base64 32`.
+
+### Producción con Docker Compose
+
+```bash
+docker compose up --build -d
+```
+
+La API queda disponible en `http://localhost:8080`. SQLite se guarda en `./data/arqweb.sqlite` y persiste aunque se reemplace el contenedor.
+
+Para ver los logs y detener la aplicación:
+
+```bash
+docker compose logs -f api
+docker compose down
+```
+
+### Desarrollo con Docker
+
+Construir la etapa de desarrollo y ejecutarla con el código del proyecto:
+
+```bash
+docker build --target development -t arqweb:development .
+docker run --rm -p 8080:8080 --env-file .env \
+  -v "$PWD/src:/app/src" \
+  -v "$PWD/data:/app/data" \
+  arqweb:development
+```
+
+La etapa de desarrollo ejecuta `npm run dev` con `tsx watch` como usuario no root.
+
 ---
 
 # Entregas y Modulos

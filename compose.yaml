@@ -10,5 +10,8 @@ services:
     environment:
       DB_PATH: /app/data/arqweb.sqlite
     volumes:
-      - ./data:/app/data
+      - sqlite-data:/app/data
     restart: unless-stopped
+
+volumes:
+  sqlite-data:

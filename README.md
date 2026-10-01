@@ -29,7 +29,7 @@ No subir `.env` al repositorio. Para generar un secreto JWT, se puede usar `open
 docker compose up --build -d
 ```
 
-La API queda disponible en `http://localhost:8080`. SQLite se guarda en `./data/arqweb.sqlite` y persiste aunque se reemplace el contenedor.
+La API queda disponible en `http://localhost:8080`. SQLite se guarda en el volumen Docker `sqlite-data` y persiste aunque se reemplace el contenedor.
 
 Para ver los logs y detener la aplicación:
 

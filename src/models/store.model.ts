@@ -12,7 +12,18 @@ export interface StoreTable {
   created_at: Generated<string>;
 }
 
+export interface ProductTable {
+  id: Generated<number>;
+  store_id: number;
+  nombre: string;
+  descripcion: string;
+  precio: number;
+  stock: number;
+  created_at: Generated<string>;
+}
+
 export interface Database {
   users: import('./user.model.js').UserTable;
   stores: StoreTable;
+  products: ProductTable;
 }

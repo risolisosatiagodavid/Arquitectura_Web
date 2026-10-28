@@ -9,6 +9,30 @@ Repositorio central para el desarrollo del Trabajo Práctico Integrador de la ma
 - **Lenguaje:** JavaScript / TypeScript
 - **Entorno de desarrollo:** Ubuntu 26.04 LTS en WSL2
 
+## Mensajes de commit
+
+El proyecto usa Commitizen para crear commits siguiendo Conventional Commits. Ejecutar:
+
+```bash
+git add <archivos>
+npm run commit
+```
+
+El asistente solicita el tipo, alcance y descripción del cambio. Los tipos habituales son `feat` para funcionalidades, `fix` para correcciones, `docs` para documentación, `refactor` para refactorizaciones y `test` para pruebas. También se puede indicar un cambio incompatible (`breaking change`) desde las opciones del asistente.
+
+El CI valida los mensajes de todos los commits de cada pull request con las reglas Conventional Commits.
+
+### Versionado SemVer
+
+Al integrar commits a `main`, GitHub Actions ejecuta build y tests y luego `semantic-release` analiza los mensajes Conventional Commits para crear tags Git `vMAJOR.MINOR.PATCH` y una GitHub Release:
+
+- `fix:` y `perf:` incrementan la versión `PATCH`.
+- `feat:` incrementa `MINOR`.
+- Un cambio incompatible (`!` o pie `BREAKING CHANGE:`) incrementa `MAJOR`.
+- Otros tipos, como `docs:`, `test:` y `chore:`, no generan una versión por sí solos.
+
+El workflow usa `GITHUB_TOKEN`; no requiere secretos adicionales. La publicación a Docker Hub se configurará en el pipeline de CD por separado.
+
 ## Ejecución con Docker
 
 La imagen usa tres etapas: `builder` compila TypeScript y las dependencias nativas; `development` corre con Node como usuario no root; y `production` usa una imagen Distroless con solo los archivos compilados y dependencias de producción.
@@ -88,6 +112,10 @@ curl -i http://localhost:8080/ruta-invalida
 
 ---
  # 2. Documentacion de la API
+
+### Errores
+
+Las respuestas de error usan el formato JSON `{ "error": "..." }`. Un JSON malformado devuelve `400`, una ruta inexistente devuelve `404`, un cuerpo demasiado grande devuelve `413` y los errores inesperados devuelven `500` sin exponer detalles internos. Los detalles de los errores inesperados se registran en el servidor.
 
 ### Autenticación y Usuarios
 ```http

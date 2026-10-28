@@ -41,8 +41,13 @@ export const requireAuth = async (request: Request, response: Response, next: Ne
 
     request.authenticatedUser = user;
     next();
-  } catch {
-    response.status(401).json({ error: 'Token invalido' });
+  } catch (error) {
+    if (error instanceof jwt.JsonWebTokenError) {
+      response.status(401).json({ error: 'Token invalido' });
+      return;
+    }
+
+    next(error);
   }
 };
 
@@ -62,7 +67,12 @@ export const optionalAuth = async (request: Request, response: Response, next: N
     }
 
     next();
-  } catch {
-    response.status(401).json({ error: 'Token invalido' });
+  } catch (error) {
+    if (error instanceof jwt.JsonWebTokenError) {
+      response.status(401).json({ error: 'Token invalido' });
+      return;
+    }
+
+    next(error);
   }
 };

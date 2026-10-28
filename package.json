@@ -5,7 +5,10 @@
   "main": "index.js",
   "scripts": {
     "build": "tsc",
+    "commit": "cz",
     "dev": "tsx watch src/server.ts",
+    "lint:commits": "commitlint",
+    "release": "semantic-release",
     "start": "node dist/server.js",
     "test": "tsx --test tests/*.test.ts"
   },
@@ -13,16 +16,29 @@
   "author": "",
   "license": "ISC",
   "type": "module",
+  "config": {
+    "commitizen": {
+      "path": "cz-conventional-changelog"
+    }
+  },
   "devDependencies": {
+    "@commitlint/cli": "^21.2.4",
+    "@commitlint/config-conventional": "^21.2.4",
     "@types/better-sqlite3": "^9.6.0",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.2.0",
+    "commitizen": "^4.3.2",
+    "cz-conventional-changelog": "^3.3.0",
+    "semantic-release": "^25.0.9",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   },
   "allowScripts": {
-    "tsx@4.23.12": true
+    "tsx@4.23.12": true,
+    "argon2@0.45.1": true,
+    "better-sqlite3@13.0.3": true,
+    "esbuild@0.28.2": true
   },
   "dependencies": {
     "argon2": "^0.45.1",

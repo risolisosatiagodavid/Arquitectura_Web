@@ -44,4 +44,16 @@ export const initializeDatabase = async () => {
     .addColumn('telefono', 'text')
     .addColumn('created_at', 'text', (column) => column.notNull().defaultTo(sql`CURRENT_TIMESTAMP`))
     .execute();
+
+  await db.schema
+    .createTable('products')
+    .ifNotExists()
+    .addColumn('id', 'integer', (column) => column.primaryKey().autoIncrement())
+    .addColumn('store_id', 'integer', (column) => column.notNull().references('stores.id').onDelete('cascade'))
+    .addColumn('nombre', 'text', (column) => column.notNull())
+    .addColumn('descripcion', 'text', (column) => column.notNull())
+    .addColumn('precio', 'real', (column) => column.notNull())
+    .addColumn('stock', 'integer', (column) => column.notNull())
+    .addColumn('created_at', 'text', (column) => column.notNull().defaultTo(sql`CURRENT_TIMESTAMP`))
+    .execute();
 };

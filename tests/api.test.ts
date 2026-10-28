@@ -56,6 +56,38 @@ const authRequest = (path: string, token: string, options: RequestInit = {}) =>
     },
   });
 
+const createTestStore = async (
+  user: AuthenticatedUser,
+  name: string,
+  visibilidad: 'publica' | 'privada' = 'publica',
+) => {
+  const response = await authRequest('/tiendas', user.token, {
+    method: 'POST',
+    body: JSON.stringify({
+      storename: name,
+      descripcion: 'Descripcion',
+      owner: user.id,
+      visibilidad,
+    }),
+  });
+  assert.equal(response.status, 201);
+  return await response.json() as { id: number };
+};
+
+const createTestProduct = async (user: AuthenticatedUser, storeId: number) => {
+  const response = await authRequest(`/tiendas/${storeId}/productos`, user.token, {
+    method: 'POST',
+    body: JSON.stringify({
+      nombre: 'Producto de prueba',
+      descripcion: 'Descripcion del producto',
+      precio: 1250,
+      stock: 8,
+    }),
+  });
+  assert.equal(response.status, 201);
+  return await response.json() as { id: number };
+};
+
 before(async () => {
   await initializeDatabase();
   server = app.listen(0);
@@ -66,6 +98,7 @@ before(async () => {
 });
 
 beforeEach(async () => {
+  await db.deleteFrom('products').execute();
   await db.deleteFrom('stores').execute();
   await db.deleteFrom('users').execute();
 });
@@ -338,6 +371,269 @@ describe('Tiendas', () => {
     const response = await authRequest('/tiendas', user.token, { method: 'POST', body });
 
     assert.equal(response.status, 409);
+  });
+
+  it('postProducto_success_201', async () => {
+    const user = await registerUser('post-product-success');
+    const createdStore = await authRequest('/tiendas', user.token, {
+      method: 'POST',
+      body: JSON.stringify({
+        storename: 'Tienda con productos',
+        descripcion: 'Descripcion',
+        owner: user.id,
+        visibilidad: 'publica',
+      }),
+    });
+    const store = await createdStore.json() as { id: number };
+    const response = await authRequest(`/tiendas/${store.id}/productos`, user.token, {
+      method: 'POST',
+      body: JSON.stringify({
+        nombre: 'Producto nuevo',
+        descripcion: 'Descripcion del producto',
+        precio: 1250.5,
+        stock: 8,
+      }),
+    });
+
+    assert.equal(response.status, 201);
+    const product = await response.json() as {
+      id: number;
+      tienda_id: number;
+      nombre: string;
+      descripcion: string;
+      precio: number;
+      stock: number;
+    };
+    assert.ok(Number.isInteger(product.id));
+    assert.deepEqual(product, {
+      id: product.id,
+      tienda_id: store.id,
+      nombre: 'Producto nuevo',
+      descripcion: 'Descripcion del producto',
+      precio: 1250.5,
+      stock: 8,
+    });
+  });
+
+  it('postProducto_failure_400', async () => {
+    const user = await registerUser('post-product-invalid');
+    const createdStore = await authRequest('/tiendas', user.token, {
+      method: 'POST',
+      body: JSON.stringify({
+        storename: 'Tienda para producto invalido',
+        descripcion: 'Descripcion',
+        owner: user.id,
+        visibilidad: 'publica',
+      }),
+    });
+    const store = await createdStore.json() as { id: number };
+    const response = await authRequest(`/tiendas/${store.id}/productos`, user.token, {
+      method: 'POST',
+      body: JSON.stringify({
+        nombre: 'Producto invalido',
+        descripcion: 'Descripcion',
+        precio: -1,
+        stock: 2.5,
+      }),
+    });
+
+    assert.equal(response.status, 400);
+  });
+
+  it('postProducto_failure_401', async () => {
+    const response = await jsonRequest('/tiendas/1/productos', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+
+    assert.equal(response.status, 401);
+  });
+
+  it('postProducto_failure_403', async () => {
+    const owner = await registerUser('post-product-owner');
+    const other = await registerUser('post-product-other');
+    const createdStore = await authRequest('/tiendas', owner.token, {
+      method: 'POST',
+      body: JSON.stringify({
+        storename: 'Tienda ajena',
+        descripcion: 'Descripcion',
+        owner: owner.id,
+        visibilidad: 'publica',
+      }),
+    });
+    const store = await createdStore.json() as { id: number };
+    const response = await authRequest(`/tiendas/${store.id}/productos`, other.token, {
+      method: 'POST',
+      body: JSON.stringify({
+        nombre: 'Producto de otro',
+        descripcion: 'Descripcion',
+        precio: 10,
+        stock: 1,
+      }),
+    });
+
+    assert.equal(response.status, 403);
+  });
+
+  it('postProducto_failure_404', async () => {
+    const user = await registerUser('post-product-missing-store');
+    const response = await authRequest('/tiendas/99999/productos', user.token, {
+      method: 'POST',
+      body: JSON.stringify({
+        nombre: 'Producto',
+        descripcion: 'Descripcion',
+        precio: 10,
+        stock: 1,
+      }),
+    });
+
+    assert.equal(response.status, 404);
+  });
+
+  it('getProductos_success_200', async () => {
+    const user = await registerUser('list-products');
+    const store = await createTestStore(user, 'Tienda listado productos');
+    await createTestProduct(user, store.id);
+    await createTestProduct(user, store.id);
+
+    const response = await jsonRequest(`/tiendas/${store.id}/productos`);
+
+    assert.equal(response.status, 200);
+    const products = await response.json() as Array<{ tienda_id: number }>;
+    assert.equal(products.length, 2);
+    assert.ok(products.every((product) => product.tienda_id === store.id));
+  });
+
+  it('getProductos_failure_403_for_private_store', async () => {
+    const owner = await registerUser('list-private-products-owner');
+    const visitor = await registerUser('list-private-products-visitor');
+    const store = await createTestStore(owner, 'Tienda privada listado productos', 'privada');
+    await createTestProduct(owner, store.id);
+
+    const response = await authRequest(`/tiendas/${store.id}/productos`, visitor.token);
+
+    assert.equal(response.status, 403);
+    const ownerResponse = await authRequest(`/tiendas/${store.id}/productos`, owner.token);
+    assert.equal(ownerResponse.status, 200);
+  });
+
+  it('getProductos_failure_404', async () => {
+    const response = await jsonRequest('/tiendas/99999/productos');
+    assert.equal(response.status, 404);
+  });
+
+  it('getProducto_success_200', async () => {
+    const owner = await registerUser('get-product');
+    const store = await createTestStore(owner, 'Tienda get producto');
+    const product = await createTestProduct(owner, store.id);
+
+    const response = await jsonRequest(`/productos/${product.id}`);
+
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).id, product.id);
+  });
+
+  it('getProducto_failure_403_for_private_store', async () => {
+    const owner = await registerUser('get-private-product-owner');
+    const store = await createTestStore(owner, 'Tienda privada get producto', 'privada');
+    const product = await createTestProduct(owner, store.id);
+
+    const response = await jsonRequest(`/productos/${product.id}`);
+
+    assert.equal(response.status, 403);
+  });
+
+  it('getProducto_failure_404', async () => {
+    const response = await jsonRequest('/productos/99999');
+    assert.equal(response.status, 404);
+  });
+
+  it('patchProducto_success_200', async () => {
+    const owner = await registerUser('patch-product');
+    const store = await createTestStore(owner, 'Tienda patch producto');
+    const product = await createTestProduct(owner, store.id);
+
+    const response = await authRequest(`/productos/${product.id}`, owner.token, {
+      method: 'PATCH',
+      body: JSON.stringify({ precio: 999.5, stock: 3 }),
+    });
+
+    assert.equal(response.status, 200);
+    const updated = await response.json();
+    assert.equal(updated.precio, 999.5);
+    assert.equal(updated.stock, 3);
+    assert.equal(updated.nombre, 'Producto de prueba');
+  });
+
+  it('patchProducto_failure_400', async () => {
+    const owner = await registerUser('patch-product-invalid');
+    const store = await createTestStore(owner, 'Tienda patch producto invalido');
+    const product = await createTestProduct(owner, store.id);
+
+    const response = await authRequest(`/productos/${product.id}`, owner.token, {
+      method: 'PATCH',
+      body: JSON.stringify({ stock: -1 }),
+    });
+
+    assert.equal(response.status, 400);
+  });
+
+  it('patchProducto_failure_403', async () => {
+    const owner = await registerUser('patch-product-owner');
+    const visitor = await registerUser('patch-product-visitor');
+    const store = await createTestStore(owner, 'Tienda patch ajeno');
+    const product = await createTestProduct(owner, store.id);
+
+    const response = await authRequest(`/productos/${product.id}`, visitor.token, {
+      method: 'PATCH',
+      body: JSON.stringify({ stock: 4 }),
+    });
+
+    assert.equal(response.status, 403);
+  });
+
+  it('patchProducto_failure_404', async () => {
+    const owner = await registerUser('patch-product-missing');
+    const response = await authRequest('/productos/99999', owner.token, {
+      method: 'PATCH',
+      body: JSON.stringify({ stock: 4 }),
+    });
+
+    assert.equal(response.status, 404);
+  });
+
+  it('deleteProducto_success_204', async () => {
+    const owner = await registerUser('delete-product');
+    const store = await createTestStore(owner, 'Tienda delete producto');
+    const product = await createTestProduct(owner, store.id);
+
+    const response = await authRequest(`/productos/${product.id}`, owner.token, { method: 'DELETE' });
+
+    assert.equal(response.status, 204);
+    const missing = await jsonRequest(`/productos/${product.id}`);
+    assert.equal(missing.status, 404);
+  });
+
+  it('deleteProducto_failure_403', async () => {
+    const owner = await registerUser('delete-product-owner');
+    const visitor = await registerUser('delete-product-visitor');
+    const store = await createTestStore(owner, 'Tienda delete ajeno');
+    const product = await createTestProduct(owner, store.id);
+
+    const response = await authRequest(`/productos/${product.id}`, visitor.token, { method: 'DELETE' });
+
+    assert.equal(response.status, 403);
+  });
+
+  it('deleteProducto_failure_404', async () => {
+    const owner = await registerUser('delete-product-missing');
+    const response = await authRequest('/productos/99999', owner.token, { method: 'DELETE' });
+    assert.equal(response.status, 404);
+  });
+
+  it('deleteProducto_failure_401', async () => {
+    const response = await jsonRequest('/productos/1', { method: 'DELETE' });
+    assert.equal(response.status, 401);
   });
 
   it('patchTienda_success_200', async () => {

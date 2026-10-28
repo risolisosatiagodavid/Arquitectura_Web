@@ -73,6 +73,23 @@ beforeEach(async () => {
 after(() => server.close());
 
 describe('Autenticacion', () => {
+  it('returns_400_for_malformed_json', async () => {
+    const response = await jsonRequest('/auth/login', {
+      method: 'POST',
+      body: '{',
+    });
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: 'JSON inválido' });
+  });
+
+  it('returns_json_404_for_unknown_routes', async () => {
+    const response = await jsonRequest('/ruta-inexistente');
+
+    assert.equal(response.status, 404);
+    assert.deepEqual(await response.json(), { error: 'Recurso no encontrado' });
+  });
+
   it('register_success_201', async () => {
     const response = await jsonRequest('/auth/registro', {
       method: 'POST',
@@ -148,6 +165,11 @@ describe('Usuarios', () => {
 
   it('getUsuario_failure_401', async () => {
     const response = await jsonRequest('/usuarios/1');
+    assert.equal(response.status, 401);
+  });
+
+  it('getUsuario_failure_401_invalid_token', async () => {
+    const response = await authRequest('/usuarios/1', 'token-invalido');
     assert.equal(response.status, 401);
   });
 

@@ -3,6 +3,7 @@ import express from 'express';
 import authRoutes from './routes/auth.routes.js';
 import storeRoutes from './routes/store.routes.js';
 import userRoutes from './routes/user.routes.js';
+import { errorHandler, notFound } from './middlewares/error.middleware.js';
 
 const app = express();
 
@@ -10,5 +11,7 @@ app.use(express.json());
 app.use('/auth', authRoutes);
 app.use('/tiendas', storeRoutes);
 app.use('/usuarios', userRoutes);
+app.use(notFound);
+app.use(errorHandler);
 
 export default app;

@@ -188,11 +188,11 @@ DELETE /tiendas/:id                   // [204, 403, 404] Elimina una tienda del 
 
 ### Catálogo de Productos
 ```http
-GET    /tiendas/:id/productos         // [200, 404] Obtiene el catálogo de productos de una tienda
-POST   /tiendas/:id/productos         // [201, 400, 403, 404] Da de alta un nuevo producto dentro de la tienda
-GET    /productos/:id                 // [200, 404] Detalle y datos comerciales de un producto
-PATCH  /productos/:id                 // [200, 400, 403, 404] Actualiza precio o inventario de un producto
-DELETE /productos/:id                 // [204, 403, 404] Elimina un producto del catálogo
+GET    /tiendas/:id/productos         // [200, 403, 404] Obtiene el catálogo visible de una tienda
+POST   /tiendas/:id/productos         // [201, 400, 401, 403, 404] Da de alta un nuevo producto dentro de la tienda (solo dueño)
+GET    /productos/:id                 // [200, 403, 404] Detalle y datos comerciales de un producto visible
+PATCH  /productos/:id                 // [200, 400, 401, 403, 404] Actualiza precio o inventario de un producto (solo dueño)
+DELETE /productos/:id                 // [204, 401, 403, 404] Elimina un producto del catálogo (solo dueño)
 ```
 *Payloads requeridos:*
 
@@ -205,6 +205,7 @@ DELETE /productos/:id                 // [204, 403, 404] Elimina un producto del
   "stock": 0
 }
 ```
+`nombre` y `descripcion` deben ser textos no vacios, `precio` un numero no negativo y `stock` un entero no negativo. Solo el dueño de la tienda puede crear productos.
 
 * **PATCH /productos/:id**:
 ```json
@@ -215,6 +216,7 @@ DELETE /productos/:id                 // [204, 403, 404] Elimina un producto del
   "stock": 0
 }
 ```
+La actualización acepta uno o más campos. `nombre` y `descripcion` deben ser textos no vacios, `precio` un numero no negativo y `stock` un entero no negativo. Solo el dueño de la tienda puede modificar o eliminar sus productos. Los productos de tiendas privadas solo son visibles para su dueño.
 
 ---
 

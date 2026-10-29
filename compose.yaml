@@ -9,6 +9,7 @@ services:
       - .env
     environment:
       DB_PATH: /app/data/arqweb.sqlite
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
     volumes:
       - sqlite-data:/app/data
     restart: unless-stopped

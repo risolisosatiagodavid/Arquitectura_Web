@@ -1,4 +1,5 @@
 import express from 'express';
+import path from 'node:path';
 
 import authRoutes from './routes/auth.routes.js';
 import storeRoutes from './routes/store.routes.js';
@@ -8,6 +9,7 @@ import { errorHandler, notFound } from './middlewares/error.middleware.js';
 
 const app = express();
 
+app.use(express.static(path.resolve('frontend/dist')));
 app.use(express.json());
 app.use('/auth', authRoutes);
 app.use('/tiendas', storeRoutes);

@@ -42,7 +42,9 @@ const registerUser = async (suffix = `${Date.now()}-${Math.random()}`): Promise<
     method: 'POST',
     body: JSON.stringify({ email, password: 'secret123' }),
   });
-  const { token } = await login.json() as { token: string };
+  const setCookie = login.headers.get('set-cookie');
+  const token = setCookie?.match(/mercado_ya_session=([^;]+)/)?.[1];
+  assert.ok(token);
 
   return { id: user.id, token };
 };
@@ -52,7 +54,7 @@ const authRequest = (path: string, token: string, options: RequestInit = {}) =>
     ...options,
     headers: {
       ...options.headers,
-      authorization: `Bearer ${token}`,
+      cookie: `mercado_ya_session=${token}`,
     },
   });
 
@@ -135,7 +137,16 @@ describe('Autenticacion', () => {
     });
 
     assert.equal(response.status, 201);
-    assert.equal((await response.json()).email, 'ana@example.com');
+    const cookie = response.headers.get('set-cookie') ?? '';
+    assert.match(cookie, /mercado_ya_session=.*HttpOnly/i);
+    const user = await response.json() as { id: number; email: string };
+    assert.equal(user.email, 'ana@example.com');
+
+    const sessionResponse = await jsonRequest('/auth/sesion', {
+      headers: { cookie: cookie.split(';')[0] },
+    });
+    assert.equal(sessionResponse.status, 200);
+    assert.equal((await sessionResponse.json()).user.id, user.id);
   });
 
   it('register_failure_400', async () => {
@@ -165,6 +176,51 @@ describe('Autenticacion', () => {
   it('login_success_200', async () => {
     const user = await registerUser('login-success');
     assert.ok(user.token);
+  });
+
+  it('login_sets_http_only_session_cookie', async () => {
+    const email = `cookie-${Date.now()}@example.com`;
+    await jsonRequest('/auth/registro', {
+      method: 'POST',
+      body: JSON.stringify({
+        nombre: 'Cookie User',
+        email,
+        password: 'secret123',
+        domicilio: 'Buenos Aires',
+      }),
+    });
+
+    const response = await jsonRequest('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password: 'secret123' }),
+    });
+
+    assert.equal(response.status, 200);
+    const cookie = response.headers.get('set-cookie') ?? '';
+    assert.match(cookie, /mercado_ya_session=/);
+    assert.match(cookie, /HttpOnly/i);
+    assert.match(cookie, /SameSite=Lax/i);
+    assert.match(cookie, /Max-Age=3600/i);
+    const body = await response.json() as { user: { id: number; email: string; passwordHash?: string }; token?: string };
+    assert.ok(Number.isInteger(body.user.id));
+    assert.equal(body.user.email, email);
+    assert.equal(body.user.passwordHash, undefined);
+    assert.equal(body.token, undefined);
+  });
+
+  it('session_endpoint_returns_user_and_logout_clears_cookie', async () => {
+    const user = await registerUser('session-endpoint');
+    const sessionResponse = await authRequest('/auth/sesion', user.token);
+
+    assert.equal(sessionResponse.status, 200);
+    assert.equal((await sessionResponse.json()).user.id, user.id);
+
+    const logoutResponse = await authRequest('/auth/logout', user.token, { method: 'POST' });
+    assert.equal(logoutResponse.status, 204);
+    assert.match(logoutResponse.headers.get('set-cookie') ?? '', /mercado_ya_session=;.*Expires=Thu, 01 Jan 1970/i);
+
+    const unauthenticatedResponse = await jsonRequest('/auth/sesion');
+    assert.equal(unauthenticatedResponse.status, 401);
   });
 
   it('login_failure_400', async () => {
@@ -336,10 +392,17 @@ describe('Tiendas', () => {
         descripcion: 'Descripcion',
         owner: user.id,
         visibilidad: 'publica',
+        categoria: 'Gastronomía',
       }),
     });
 
     assert.equal(response.status, 201);
+    const createdStore = await response.json() as { id: number; categoria: string };
+    assert.equal(createdStore.categoria, 'Gastronomía');
+
+    const catalogResponse = await jsonRequest('/tiendas');
+    const catalog = await catalogResponse.json() as Array<{ id: number; categoria: string }>;
+    assert.equal(catalog.find((store) => store.id === createdStore.id)?.categoria, 'Gastronomía');
   });
 
   it('postTienda_failure_401', async () => {

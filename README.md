@@ -1,12 +1,13 @@
-# Arquitectura Web - Trabajo Práctico Integrador
+# Mercado Ya — Trabajo Práctico Integrador de Arquitectura Web
 
-Repositorio central para el desarrollo del Trabajo Práctico Integrador de la materia **Arquitectura Web** (Universidad de Palermo). El proyecto se enfoca en el diseño e implementación de servicios web, priorizando buenas prácticas de arquitectura y consideraciones de seguridad.
+**Mercado Ya** es la aplicación web del Trabajo Práctico Integrador de la materia **Arquitectura Web** (Universidad de Palermo). El proyecto se enfoca en el diseño e implementación de servicios web, priorizando buenas prácticas de arquitectura y consideraciones de seguridad.
 
 ---
 
 ## Tecnologías y Entorno
 - **Runtime:** Node.js (LTS)
 - **Lenguaje:** JavaScript / TypeScript
+- **Frontend:** Vue 3 + Vite
 - **Entorno de desarrollo:** Ubuntu 26.04 LTS en WSL2
 
 ## Mensajes de commit
@@ -43,9 +44,29 @@ Crear un archivo `.env` en la raíz del proyecto:
 PORT=8080
 JWT_SECRET=una-clave-aleatoria-larga
 DB_PATH=data/arqweb.sqlite
+COOKIE_SECURE=false
 ```
 
 No subir `.env` al repositorio. Para generar un secreto JWT, se puede usar `openssl rand -base64 32`.
+`COOKIE_SECURE=false` es solo para desarrollo local por HTTP. En un entorno publicado detrás de HTTPS, configurarlo como `true`; la cookie de sesión es `HttpOnly`, `SameSite=Lax` y expira junto con el JWT al cabo de una hora.
+
+### Desarrollo local
+
+En una terminal iniciar la API:
+
+```bash
+npm run dev
+```
+
+En otra terminal iniciar Vue:
+
+```bash
+npm run frontend:dev
+```
+
+Abrir `http://localhost:5173`. Vite reenvía las solicitudes de la API al servidor local en el puerto `8080`. La sesión se establece mediante una cookie `HttpOnly`; el frontend no lee ni almacena el JWT.
+
+Para compilar frontend y API, ejecutar `npm run build`. Con Docker Compose, el frontend compilado y la API se sirven juntos desde `http://localhost:8080`.
 
 ### Producción con Docker Compose
 
@@ -53,7 +74,7 @@ No subir `.env` al repositorio. Para generar un secreto JWT, se puede usar `open
 docker compose up --build -d
 ```
 
-La API queda disponible en `http://localhost:8080`. SQLite se guarda en el volumen Docker `sqlite-data` y persiste aunque se reemplace el contenedor.
+La aplicación Vue y la API quedan disponibles en `http://localhost:8080`. SQLite se guarda en el volumen Docker `sqlite-data` y persiste aunque se reemplace el contenedor. Al publicarla con HTTPS, configurar `COOKIE_SECURE=true`.
 
 Para ver los logs y detener la aplicación:
 
@@ -120,10 +141,13 @@ Las respuestas de error usan el formato JSON `{ "error": "..." }`. Un JSON malfo
 ### Autenticación y Usuarios
 ```http
 POST  /auth/registro                  // [201, 400, 409] Registra un usuario en la plataforma
-POST  /auth/login                     // [200, 400, 401] Autentica credenciales y emite token JWT
+POST  /auth/login                     // [200, 400, 401] Autentica credenciales y establece una cookie de sesión
+GET   /auth/sesion                    // [200, 401] Consulta la sesión autenticada actual
+POST  /auth/logout                    // [204] Cierra la sesión eliminando la cookie
 GET   /usuarios/:id                   // [200, 401, 403, 404] Obtiene datos del perfil del usuario
 PATCH /usuarios/:id                   // [200, 400, 409] Actualiza datos personales o de contacto
 ```
+El JWT se entrega exclusivamente en una cookie `HttpOnly`, `SameSite=Lax`, con expiración de una hora. En producción, la cookie usa el atributo `Secure`.
 *Payloads requeridos:*
 
 * **POST /auth/registro**:

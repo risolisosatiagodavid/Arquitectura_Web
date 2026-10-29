@@ -16,6 +16,7 @@ RUN --mount=type=cache,target=/root/.npm \
 
 COPY tsconfig.json ./
 COPY src ./src
+COPY frontend ./frontend
 RUN npm run build
 RUN mkdir -p /app/data
 RUN cp -a node_modules node_modules-development
@@ -31,6 +32,7 @@ COPY --from=builder --chown=node:node /app/node_modules-development ./node_modul
 COPY --from=builder --chown=node:node /app/data ./data
 COPY --chown=node:node package*.json tsconfig.json ./
 COPY --chown=node:node src ./src
+COPY --chown=node:node frontend ./frontend
 COPY --chown=node:node tests ./tests
 
 USER node
@@ -46,6 +48,7 @@ WORKDIR /app
 COPY --from=builder --chown=nonroot:nonroot /app/package*.json ./
 COPY --from=builder --chown=nonroot:nonroot /app/node_modules ./node_modules
 COPY --from=builder --chown=nonroot:nonroot /app/dist ./dist
+COPY --from=builder --chown=nonroot:nonroot /app/frontend/dist ./frontend/dist
 COPY --from=builder --chown=nonroot:nonroot /app/data ./data
 
 USER nonroot

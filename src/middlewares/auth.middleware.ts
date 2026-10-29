@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import 'dotenv/config';
 
 import { findUserById } from '../services/user.service.js';
+import { readSessionCookie } from '../utils/session.js';
 
 const authenticateRequest = async (request: Request, token: string) => {
   const jwtSecret = process.env.JWT_SECRET;
@@ -24,7 +25,8 @@ const authenticateRequest = async (request: Request, token: string) => {
 
 export const requireAuth = async (request: Request, response: Response, next: NextFunction) => {
   const authorization = request.header('authorization');
-  const token = authorization?.startsWith('Bearer ') ? authorization.slice(7) : undefined;
+  const token = readSessionCookie(request.header('cookie'))
+    ?? (authorization?.startsWith('Bearer ') ? authorization.slice(7) : undefined);
 
   if (!token) {
     response.status(401).json({ error: 'Token de autenticacion requerido' });
@@ -53,7 +55,8 @@ export const requireAuth = async (request: Request, response: Response, next: Ne
 
 export const optionalAuth = async (request: Request, response: Response, next: NextFunction) => {
   const authorization = request.header('authorization');
-  const token = authorization?.startsWith('Bearer ') ? authorization.slice(7) : undefined;
+  const token = readSessionCookie(request.header('cookie'))
+    ?? (authorization?.startsWith('Bearer ') ? authorization.slice(7) : undefined);
 
   if (!token) {
     next();

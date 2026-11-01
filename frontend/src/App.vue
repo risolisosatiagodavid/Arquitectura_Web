@@ -60,7 +60,11 @@ const isSaving = ref(false);
 const authOpen = ref(false);
 const registerMode = ref(false);
 const storeFormOpen = ref(false);
+const editingStoreId = ref<number | null>(null);
+const openStoreMenuId = ref<number | null>(null);
 const productFormOpen = ref(false);
+const editingProductId = ref<number | null>(null);
+const openProductMenuId = ref<number | null>(null);
 const cartOpen = ref(false);
 const checkoutOpen = ref(window.location.pathname === '/checkout');
 const checkoutSuccess = ref(false);
@@ -128,6 +132,8 @@ const filteredStores = computed(() => {
   });
 });
 
+const storesForDisplay = computed(() => [...filteredStores.value].sort((first, second) =>
+  Number(second.owner === currentUser.value?.id) - Number(first.owner === currentUser.value?.id)));
 const cartCount = computed(() => cart.value.reduce((sum, item) => sum + item.quantity, 0));
 const cartTotal = computed(() => cart.value.reduce((sum, item) => sum + item.precio * item.quantity, 0));
 const checkoutReady = computed(() =>
@@ -140,6 +146,7 @@ const canManageSelectedStore = computed(() =>
 const productCountForStore = (storeId: number) =>
   products.value.filter((product) => product.tienda_id === storeId).length;
 const openStore = (store: Store) => {
+  openStoreMenuId.value = null;
   selectedStore.value = String(store.id);
   selectedCategory.value = 'Todos';
   searchQuery.value = '';
@@ -382,7 +389,7 @@ const submitCheckout = async () => {
   }
 };
 
-const createStore = async () => {
+const saveStore = async () => {
   if (!currentUser.value) {
     storeFormOpen.value = false;
     openAuth();
@@ -401,34 +408,48 @@ const createStore = async () => {
   errorMessage.value = '';
 
   try {
-    const store = await apiRequest<Store>('/tiendas', {
-      method: 'POST',
-      body: JSON.stringify({
-        ...storeForm.value,
-        storename: storeName,
-        descripcion: description,
-        owner: currentUser.value.id,
-        visibilidad: 'publica',
-      }),
-    });
+    const store = editingStoreId.value
+      ? await apiRequest<Store>(`/tiendas/${editingStoreId.value}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          nombre: storeName,
+          descripcion: description,
+          categoria: storeForm.value.categoria,
+          ...(storeForm.value.zona.trim() && { zona: storeForm.value.zona.trim() }),
+        }),
+      })
+      : await apiRequest<Store>('/tiendas', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...storeForm.value,
+          storename: storeName,
+          descripcion: description,
+          owner: currentUser.value.id,
+          visibilidad: 'publica',
+        }),
+      });
+    const wasEditing = editingStoreId.value !== null;
     storeFormOpen.value = false;
+    editingStoreId.value = null;
     storeForm.value = { storename: '', descripcion: '', categoria: '', zona: '' };
-    selectedStore.value = String(store.id);
-    selectedCategory.value = 'Todos';
+    if (!wasEditing) {
+      selectedStore.value = String(store.id);
+      selectedCategory.value = 'Todos';
+    }
     const catalogLoaded = await loadCatalog();
     showNotice(catalogLoaded
-      ? '¡Tu tienda ya está publicada!'
+      ? wasEditing ? 'Los cambios de tu tienda se guardaron.' : '¡Tu tienda ya está publicada!'
       : 'La tienda se guardó, pero no pudimos actualizar el catálogo. Volvé a cargar la página.');
   } catch (error) {
     if (error instanceof ApiRequestError && error.status === 401) {
       currentUser.value = null;
       storeFormOpen.value = false;
       openAuth();
-      errorMessage.value = 'Tu sesión venció. Iniciá sesión para publicar tu tienda.';
+      errorMessage.value = 'Tu sesión venció. Iniciá sesión para guardar los cambios de tu tienda.';
       return;
     }
 
-    errorMessage.value = error instanceof Error ? error.message : 'No se pudo crear la tienda.';
+    errorMessage.value = error instanceof Error ? error.message : 'No se pudo guardar la tienda.';
   } finally {
     isSaving.value = false;
   }
@@ -436,6 +457,9 @@ const createStore = async () => {
 
 const openStoreForm = async () => {
   errorMessage.value = '';
+  editingStoreId.value = null;
+  storeForm.value = { storename: '', descripcion: '', categoria: '', zona: '' };
+  openStoreMenuId.value = null;
 
   if (!currentUser.value) {
     openAuth();
@@ -459,11 +483,80 @@ const openStoreForm = async () => {
   }
 };
 
+const editStore = async (store: Store) => {
+  openStoreMenuId.value = null;
+  errorMessage.value = '';
+
+  if (!currentUser.value || store.owner !== currentUser.value.id) return;
+
+  try {
+    const session = await apiRequest<{ user: User }>('/auth/sesion');
+    currentUser.value = session.user;
+    if (store.owner !== session.user.id) {
+      errorMessage.value = 'Solo el dueño puede editar esta tienda.';
+      return;
+    }
+
+    editingStoreId.value = store.id;
+    storeForm.value = {
+      storename: store.storename,
+      descripcion: store.descripcion,
+      categoria: store.categoria ?? '',
+      zona: store.zona ?? '',
+    };
+    storeFormOpen.value = true;
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.status === 401) {
+      currentUser.value = null;
+      openAuth();
+      errorMessage.value = 'Tu sesión venció. Iniciá sesión para editar tu tienda.';
+      return;
+    }
+
+    errorMessage.value = error instanceof Error ? error.message : 'No se pudo verificar tu sesión.';
+  }
+};
+
+const removeStore = async (store: Store) => {
+  openStoreMenuId.value = null;
+  if (!currentUser.value || store.owner !== currentUser.value.id) return;
+  if (!window.confirm(`¿Querés eliminar la tienda "${store.storename}" y sus productos?`)) return;
+
+  isSaving.value = true;
+  errorMessage.value = '';
+  try {
+    await apiRequest<void>(`/tiendas/${store.id}`, { method: 'DELETE' });
+    if (selectedStore.value === String(store.id)) selectedStore.value = 'all';
+    const catalogLoaded = await loadCatalog();
+    showNotice(catalogLoaded
+      ? 'La tienda y sus productos se eliminaron.'
+      : 'La tienda se eliminó, pero no pudimos actualizar el catálogo. Volvé a cargar la página.');
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.status === 401) {
+      currentUser.value = null;
+      openAuth();
+      errorMessage.value = 'Tu sesión venció. Iniciá sesión para eliminar tu tienda.';
+      return;
+    }
+
+    errorMessage.value = error instanceof Error ? error.message : 'No se pudo eliminar la tienda.';
+  } finally {
+    isSaving.value = false;
+  }
+};
+
+const toggleStoreMenu = (storeId: number) => {
+  openStoreMenuId.value = openStoreMenuId.value === storeId ? null : storeId;
+};
+
 const openProductForm = async () => {
   const store = selectedStoreInfo.value;
   if (!store || !currentUser.value || store.owner !== currentUser.value.id) return;
 
   errorMessage.value = '';
+  editingProductId.value = null;
+  openProductMenuId.value = null;
+  productForm.value = { nombre: '', descripcion: '', precio: '', stock: '' };
   try {
     const session = await apiRequest<{ user: User }>('/auth/sesion');
     currentUser.value = session.user;
@@ -485,10 +578,78 @@ const openProductForm = async () => {
   }
 };
 
-const createProduct = async () => {
+const editProduct = async (product: CatalogProduct) => {
+  openProductMenuId.value = null;
+  errorMessage.value = '';
+  const store = selectedStoreInfo.value;
+  if (!store || !currentUser.value || store.owner !== currentUser.value.id
+    || product.tienda_id !== store.id) return;
+
+  try {
+    const session = await apiRequest<{ user: User }>('/auth/sesion');
+    currentUser.value = session.user;
+    if (store.owner !== session.user.id) {
+      errorMessage.value = 'Solo el dueño puede modificar productos de esta tienda.';
+      return;
+    }
+
+    editingProductId.value = product.id;
+    productForm.value = {
+      nombre: product.nombre,
+      descripcion: product.descripcion,
+      precio: String(product.precio),
+      stock: String(product.stock),
+    };
+    productFormOpen.value = true;
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.status === 401) {
+      currentUser.value = null;
+      openAuth();
+      errorMessage.value = 'Tu sesión venció. Iniciá sesión para editar productos.';
+      return;
+    }
+
+    errorMessage.value = error instanceof Error ? error.message : 'No se pudo verificar tu sesión.';
+  }
+};
+
+const removeProduct = async (product: CatalogProduct) => {
+  openProductMenuId.value = null;
+  const store = selectedStoreInfo.value;
+  if (!store || !currentUser.value || store.owner !== currentUser.value.id
+    || product.tienda_id !== store.id) return;
+  if (!window.confirm(`¿Querés eliminar el producto "${product.nombre}"?`)) return;
+
+  isSaving.value = true;
+  errorMessage.value = '';
+  try {
+    await apiRequest<void>(`/productos/${product.id}`, { method: 'DELETE' });
+    const catalogLoaded = await loadCatalog();
+    showNotice(catalogLoaded
+      ? 'El producto se eliminó.'
+      : 'El producto se eliminó, pero no pudimos actualizar el catálogo. Volvé a cargar la página.');
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.status === 401) {
+      currentUser.value = null;
+      openAuth();
+      errorMessage.value = 'Tu sesión venció. Iniciá sesión para eliminar productos.';
+      return;
+    }
+
+    errorMessage.value = error instanceof Error ? error.message : 'No se pudo eliminar el producto.';
+  } finally {
+    isSaving.value = false;
+  }
+};
+
+const toggleProductMenu = (productId: number) => {
+  openProductMenuId.value = openProductMenuId.value === productId ? null : productId;
+};
+
+const saveProduct = async () => {
   const store = selectedStoreInfo.value;
   if (!store || !currentUser.value || store.owner !== currentUser.value.id) {
-    errorMessage.value = 'Solo el dueño puede agregar productos a esta tienda.';
+    errorMessage.value = 'Solo el dueño puede administrar productos de esta tienda.';
     return;
   }
 
@@ -505,27 +666,32 @@ const createProduct = async () => {
   isSaving.value = true;
   errorMessage.value = '';
   try {
-    await apiRequest<Product>(`/tiendas/${store.id}/productos`, {
-      method: 'POST',
-      body: JSON.stringify({ nombre, descripcion, precio, stock }),
-    });
+    const wasEditing = editingProductId.value !== null;
+    await apiRequest<Product>(
+      wasEditing ? `/productos/${editingProductId.value}` : `/tiendas/${store.id}/productos`,
+      {
+        method: wasEditing ? 'PATCH' : 'POST',
+        body: JSON.stringify({ nombre, descripcion, precio, stock }),
+      },
+    );
     productFormOpen.value = false;
+    editingProductId.value = null;
     productForm.value = { nombre: '', descripcion: '', precio: '', stock: '' };
     selectedCategory.value = 'Todos';
     const catalogLoaded = await loadCatalog();
     showNotice(catalogLoaded
-      ? '¡El producto ya está publicado!'
+      ? wasEditing ? 'Los cambios del producto se guardaron.' : '¡El producto ya está publicado!'
       : 'El producto se guardó, pero no pudimos actualizar el catálogo. Volvé a cargar la página.');
   } catch (error) {
     if (error instanceof ApiRequestError && error.status === 401) {
       currentUser.value = null;
       productFormOpen.value = false;
       openAuth();
-      errorMessage.value = 'Tu sesión venció. Iniciá sesión para agregar productos.';
+      errorMessage.value = 'Tu sesión venció. Iniciá sesión para guardar productos.';
       return;
     }
 
-    errorMessage.value = error instanceof Error ? error.message : 'No se pudo crear el producto.';
+    errorMessage.value = error instanceof Error ? error.message : 'No se pudo guardar el producto.';
   } finally {
     isSaving.value = false;
   }
@@ -669,32 +835,63 @@ onBeforeUnmount(() => window.removeEventListener('popstate', syncCheckoutRoute))
           </div>
         </div>
 
-        <div v-else-if="!selectedStoreInfo && filteredStores.length" class="store-grid">
-          <button
-            v-for="(store, index) in filteredStores"
+        <div v-else-if="!selectedStoreInfo && storesForDisplay.length" class="store-grid">
+          <article
+            v-for="(store, index) in storesForDisplay"
             :key="store.id"
             class="store-card"
             :class="`store-card-${index % 5}`"
-            type="button"
-            :aria-label="`Ver productos de ${store.storename}`"
-            @click="openStore(store)"
           >
-            <span class="store-card-art" aria-hidden="true">{{ ['✿', '◈', '☼', '❋', '✳'][index % 5] }}</span>
-            <span class="store-card-content">
-              <span class="store-card-category">{{ store.categoria || 'TIENDA LOCAL' }}</span>
-              <strong>{{ store.storename }}</strong>
-              <span class="store-card-description">{{ store.descripcion }}</span>
-              <span class="store-card-meta">
-                <span v-if="store.zona">⌖ {{ store.zona }}</span>
-                <span>{{ productCountForStore(store.id) }} {{ productCountForStore(store.id) === 1 ? 'producto' : 'productos' }}</span>
+            <button
+              class="store-card-open"
+              type="button"
+              :aria-label="`Ver productos de ${store.storename}`"
+              @click="openStore(store)"
+            >
+              <span class="store-card-art" aria-hidden="true">{{ ['✿', '◈', '☼', '❋', '✳'][index % 5] }}</span>
+              <span class="store-card-content">
+                <span class="store-card-category">{{ store.categoria || 'TIENDA LOCAL' }}</span>
+                <strong>{{ store.storename }}</strong>
+                <span class="store-card-description">{{ store.descripcion }}</span>
+                <span class="store-card-meta">
+                  <span v-if="store.zona">⌖ {{ store.zona }}</span>
+                  <span>{{ productCountForStore(store.id) }} {{ productCountForStore(store.id) === 1 ? 'producto' : 'productos' }}</span>
+                </span>
               </span>
+              <span class="store-card-arrow" aria-hidden="true">↗</span>
+            </button>
+            <span v-if="currentUser && store.owner === currentUser.id" class="store-owner-badge">Tu tienda</span>
+            <span v-if="currentUser && store.owner === currentUser.id" class="store-actions">
+              <button
+                class="store-options-button"
+                type="button"
+                :aria-label="`Opciones de ${store.storename}`"
+                :aria-expanded="openStoreMenuId === store.id"
+                :aria-controls="`store-menu-${store.id}`"
+                @click.stop="toggleStoreMenu(store.id)"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="m19.4 15 .1.1a1.7 1.7 0 0 1-2.4 2.4l-.1-.1a1.7 1.7 0 0 0-2.9 1.2v.2a1.7 1.7 0 0 1-3.4 0v-.2a1.7 1.7 0 0 0-2.9-1.2l-.1.1a1.7 1.7 0 1 1-2.4-2.4l.1-.1a1.7 1.7 0 0 0-1.2-2.9H4a1.7 1.7 0 0 1 0-3.4h.2a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a1.7 1.7 0 1 1 2.4-2.4l.1.1a1.7 1.7 0 0 0 2.9-1.2V4a1.7 1.7 0 0 1 3.4 0v.2a1.7 1.7 0 0 0 2.9 1.2l.1-.1a1.7 1.7 0 1 1 2.4 2.4l-.1.1a1.7 1.7 0 0 0 1.2 2.9h.2a1.7 1.7 0 0 1 0 3.4h-.2a1.7 1.7 0 0 0-1.2.9Z"></path>
+                </svg>
+              </button>
+              <div v-if="openStoreMenuId === store.id" :id="`store-menu-${store.id}`" class="store-options-menu">
+                <button type="button" @click.stop="editStore(store)">Editar tienda</button>
+                <button type="button" class="store-delete-option" :disabled="isSaving" @click.stop="removeStore(store)">
+                  Eliminar tienda
+                </button>
+              </div>
             </span>
-            <span class="store-card-arrow" aria-hidden="true">↗</span>
-          </button>
+          </article>
         </div>
 
         <div v-else-if="selectedStoreInfo && filteredProducts.length" class="product-grid">
-          <article v-for="(product, index) in filteredProducts" :key="product.id" class="product-card">
+          <article
+            v-for="(product, index) in filteredProducts"
+            :key="product.id"
+            class="product-card"
+            :class="{ 'product-card-manageable': canManageSelectedStore }"
+          >
             <div class="product-copy">
               <span class="product-store">{{ product.storeName }}</span>
               <h3>{{ product.nombre }}</h3>
@@ -716,6 +913,27 @@ onBeforeUnmount(() => window.removeEventListener('popstate', syncCheckoutRoute))
               >+</button>
               <span v-else class="own-product-label">Tu tienda</span>
             </div>
+            <span v-if="canManageSelectedStore && product.tienda_id === selectedStoreInfo.id" class="product-actions">
+              <button
+                class="store-options-button"
+                type="button"
+                :aria-label="`Opciones de ${product.nombre}`"
+                :aria-expanded="openProductMenuId === product.id"
+                :aria-controls="`product-menu-${product.id}`"
+                @click="toggleProductMenu(product.id)"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="m19.4 15 .1.1a1.7 1.7 0 0 1-2.4 2.4l-.1-.1a1.7 1.7 0 0 0-2.9 1.2v.2a1.7 1.7 0 0 1-3.4 0v-.2a1.7 1.7 0 0 0-2.9-1.2l-.1.1a1.7 1.7 0 1 1-2.4-2.4l.1-.1a1.7 1.7 0 0 0-1.2-2.9H4a1.7 1.7 0 0 1 0-3.4h.2a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a1.7 1.7 0 1 1 2.4-2.4l.1.1a1.7 1.7 0 0 0 2.9-1.2V4a1.7 1.7 0 0 1 3.4 0v.2a1.7 1.7 0 0 0 2.9 1.2l.1-.1a1.7 1.7 0 1 1 2.4 2.4l-.1.1a1.7 1.7 0 0 0 1.2 2.9h.2a1.7 1.7 0 0 1 0 3.4h-.2a1.7 1.7 0 0 0-1.2.9Z"></path>
+                </svg>
+              </button>
+              <div v-if="openProductMenuId === product.id" :id="`product-menu-${product.id}`" class="store-options-menu">
+                <button type="button" @click="editProduct(product)">Editar producto</button>
+                <button type="button" class="store-delete-option" :disabled="isSaving" @click="removeProduct(product)">
+                  Eliminar producto
+                </button>
+              </div>
+            </span>
           </article>
         </div>
 
@@ -832,10 +1050,10 @@ onBeforeUnmount(() => window.removeEventListener('popstate', syncCheckoutRoute))
       <div v-if="storeFormOpen" class="modal-backdrop" @click.self="storeFormOpen = false">
         <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="store-title">
           <button class="dialog-close" type="button" aria-label="Cerrar" @click="storeFormOpen = false">×</button>
-          <span class="section-kicker">UN NEGOCIO LOCAL HACE LA DIFERENCIA</span>
-          <h2 id="store-title">Abrí las puertas.</h2>
-          <p class="dialog-intro">Contale al barrio qué hacés. Tu tienda va a quedar visible en el catálogo.</p>
-          <form class="dialog-form" @submit.prevent="createStore">
+          <span class="section-kicker">{{ editingStoreId ? 'ACTUALIZÁ TU NEGOCIO' : 'UN NEGOCIO LOCAL HACE LA DIFERENCIA' }}</span>
+          <h2 id="store-title">{{ editingStoreId ? 'Editá tu tienda.' : 'Abrí las puertas.' }}</h2>
+          <p class="dialog-intro">{{ editingStoreId ? 'Modificá los datos que aparecen en el catálogo.' : 'Contale al barrio qué hacés. Tu tienda va a quedar visible en el catálogo.' }}</p>
+          <form class="dialog-form" @submit.prevent="saveStore">
             <label>Nombre de la tienda<input v-model.trim="storeForm.storename" required /></label>
             <label>Descripción<textarea v-model.trim="storeForm.descripcion" rows="2" required></textarea></label>
             <div class="form-row">
@@ -850,7 +1068,9 @@ onBeforeUnmount(() => window.removeEventListener('popstate', syncCheckoutRoute))
               <label>Zona<input v-model.trim="storeForm.zona" placeholder="Ej. Palermo" /></label>
             </div>
             <p v-if="errorMessage" class="form-error" role="alert">{{ errorMessage }}</p>
-            <button class="primary-button form-submit" type="submit" :disabled="isSaving">Publicar mi tienda <span>→</span></button>
+            <button class="primary-button form-submit" type="submit" :disabled="isSaving">
+              {{ isSaving ? 'Guardando…' : editingStoreId ? 'Guardar cambios' : 'Publicar mi tienda' }} <span>→</span>
+            </button>
           </form>
         </section>
       </div>
@@ -861,9 +1081,9 @@ onBeforeUnmount(() => window.removeEventListener('popstate', syncCheckoutRoute))
         <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="product-title">
           <button class="dialog-close" type="button" aria-label="Cerrar" @click="productFormOpen = false">×</button>
           <span class="section-kicker">{{ selectedStoreInfo?.storename }}</span>
-          <h2 id="product-title">Sumá algo nuevo.</h2>
-          <p class="dialog-intro">Publicá un producto para que tus clientes lo encuentren.</p>
-          <form class="dialog-form" @submit.prevent="createProduct">
+          <h2 id="product-title">{{ editingProductId ? 'Editá el producto.' : 'Sumá algo nuevo.' }}</h2>
+          <p class="dialog-intro">{{ editingProductId ? 'Actualizá los datos, el precio o el stock.' : 'Publicá un producto para que tus clientes lo encuentren.' }}</p>
+          <form class="dialog-form" @submit.prevent="saveProduct">
             <label>Nombre del producto<input v-model.trim="productForm.nombre" required /></label>
             <label>Descripción<textarea v-model.trim="productForm.descripcion" rows="2" required></textarea></label>
             <div class="form-row">
@@ -872,7 +1092,7 @@ onBeforeUnmount(() => window.removeEventListener('popstate', syncCheckoutRoute))
             </div>
             <p v-if="errorMessage" class="form-error" role="alert">{{ errorMessage }}</p>
             <button class="primary-button form-submit" type="submit" :disabled="isSaving">
-              {{ isSaving ? 'Un segundo…' : 'Publicar producto' }} <span>→</span>
+              {{ isSaving ? 'Guardando…' : editingProductId ? 'Guardar cambios' : 'Publicar producto' }} <span>→</span>
             </button>
           </form>
         </section>

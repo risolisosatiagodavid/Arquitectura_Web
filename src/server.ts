@@ -1,12 +1,13 @@
 import { createServer } from 'node:http';
 
 import app from './app.js';
-import { initializeDatabase } from './config/database.js';
+import { seedDatabase } from './seed.js';
 
 const port = Number(process.env.PORT) || 8080;
 
 const startServer = async () => {
-  await initializeDatabase();
+  const seed = await seedDatabase();
+  console.log(`Initial data ready: ${seed.stores} stores and ${seed.products} products created.`);
 
   createServer(app).listen(port, () => {
     console.log(`Server running on port ${port}`);

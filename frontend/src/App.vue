@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
 interface User {
   id: number;
@@ -27,6 +27,7 @@ interface Product {
 
 interface CatalogProduct extends Product {
   storeName: string;
+  storeOwner: number;
   category?: string;
 }
 
@@ -61,11 +62,14 @@ const registerMode = ref(false);
 const storeFormOpen = ref(false);
 const productFormOpen = ref(false);
 const cartOpen = ref(false);
+const checkoutOpen = ref(window.location.pathname === '/checkout');
+const checkoutSuccess = ref(false);
 const notice = ref('');
 const errorMessage = ref('');
 const authForm = ref({ nombre: '', email: '', password: '', domicilio: '' });
 const storeForm = ref({ storename: '', descripcion: '', categoria: '', zona: '' });
 const productForm = ref({ nombre: '', descripcion: '', precio: '', stock: '' });
+const checkoutForm = ref({ nombre: '', apellido: '', direccion: '', codigoPostal: '' });
 
 const predefinedCategories = [
   { name: 'Todos', icon: '✳' },
@@ -126,6 +130,9 @@ const filteredStores = computed(() => {
 
 const cartCount = computed(() => cart.value.reduce((sum, item) => sum + item.quantity, 0));
 const cartTotal = computed(() => cart.value.reduce((sum, item) => sum + item.precio * item.quantity, 0));
+const checkoutReady = computed(() =>
+  Boolean(checkoutForm.value.nombre.trim() && checkoutForm.value.apellido.trim()
+    && checkoutForm.value.direccion.trim() && checkoutForm.value.codigoPostal.trim()));
 const selectedStoreInfo = computed(() => stores.value.find((store) => store.id === Number(selectedStore.value)));
 const selectedStoreName = computed(() => selectedStoreInfo.value?.storename);
 const canManageSelectedStore = computed(() =>
@@ -144,6 +151,8 @@ const returnToStores = () => {
 };
 const quantityInCart = (productId: number) =>
   cart.value.find((item) => item.id === productId)?.quantity ?? 0;
+const isOwnProduct = (product: CatalogProduct) =>
+  currentUser.value?.id === product.storeOwner;
 
 const formatPrice = (price: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 2 }).format(price);
@@ -181,10 +190,18 @@ const loadCatalog = async (): Promise<boolean> => {
       return storeProducts.map((product) => ({
         ...product,
         storeName: store.storename,
+        storeOwner: store.owner,
         category: store.categoria,
       }));
     }));
-    products.value = productGroups.flat();
+    const catalogProducts = productGroups.flat();
+    products.value = catalogProducts;
+    cart.value = cart.value.flatMap((item) => {
+      const currentProduct = catalogProducts.find((product) => product.id === item.id);
+      return currentProduct && !isOwnProduct(currentProduct)
+        ? [{ ...currentProduct, quantity: item.quantity }]
+        : [];
+    });
     return true;
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'No se pudo cargar el catálogo.';
@@ -198,6 +215,7 @@ const loadSession = async () => {
   try {
     const session = await apiRequest<{ user: User }>('/auth/sesion');
     currentUser.value = session.user;
+    cart.value = cart.value.filter((item) => !isOwnProduct(item));
   } catch (error) {
     currentUser.value = null;
     if (!(error instanceof ApiRequestError) || error.status !== 401) {
@@ -242,6 +260,7 @@ const submitAuth = async () => {
     }
 
     currentUser.value = user;
+    cart.value = cart.value.filter((item) => !isOwnProduct(item));
     authOpen.value = false;
     authForm.value = { nombre: '', email: '', password: '', domicilio: '' };
     showNotice(isRegistering ? '¡Tu cuenta ya está lista!' : '¡Qué bueno verte de nuevo!');
@@ -263,7 +282,17 @@ const signOut = async () => {
 };
 
 const addToCart = (product: CatalogProduct) => {
+  if (isOwnProduct(product)) {
+    showNotice('No podés agregar productos de tu propia tienda.');
+    return;
+  }
+
   const existingItem = cart.value.find((item) => item.id === product.id);
+  if (product.stock <= 0 || (existingItem && existingItem.quantity >= product.stock)) {
+    showNotice('No quedan más unidades disponibles de este producto.');
+    return;
+  }
+
   if (existingItem) {
     existingItem.quantity += 1;
   } else {
@@ -289,12 +318,68 @@ const updateQuantity = (productId: number, change: number) => {
 
 const startCheckout = () => {
   cartOpen.value = false;
-  if (!currentUser.value) {
+  checkoutOpen.value = true;
+  checkoutSuccess.value = false;
+  errorMessage.value = '';
+  if (window.location.pathname !== '/checkout') {
+    window.history.pushState({}, '', '/checkout');
+  }
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  if (cartCount.value && !currentUser.value) {
     authOpen.value = true;
     showNotice('Ingresá a tu cuenta para continuar con el pedido.');
     return;
   }
-  showNotice('El checkout se habilitará cuando esté disponible la API de compras.');
+};
+
+const returnToStore = () => {
+  checkoutOpen.value = false;
+  checkoutSuccess.value = false;
+  errorMessage.value = '';
+  if (window.location.pathname === '/checkout') {
+    window.history.replaceState({}, '', '/');
+  }
+};
+
+const submitCheckout = async () => {
+  if (!currentUser.value) {
+    openAuth();
+    errorMessage.value = 'Iniciá sesión para continuar con el pago.';
+    return;
+  }
+
+  if (!checkoutReady.value || !cartCount.value) return;
+
+  isSaving.value = true;
+  errorMessage.value = '';
+  try {
+    await apiRequest<{ message: string }>('/checkout', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...checkoutForm.value,
+        items: cart.value.map((item) => ({ productId: item.id, quantity: item.quantity })),
+      }),
+    });
+    cart.value = [];
+    checkoutSuccess.value = true;
+    checkoutForm.value = { nombre: '', apellido: '', direccion: '', codigoPostal: '' };
+    await loadCatalog();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'No se pudo completar el pago.';
+    if (error instanceof ApiRequestError && error.status === 401) {
+      currentUser.value = null;
+      openAuth();
+      errorMessage.value = 'Tu sesión venció. Iniciá sesión para continuar con el pago.';
+    } else if (error instanceof ApiRequestError && error.status === 409) {
+      await loadCatalog();
+      errorMessage.value = message;
+    } else {
+      errorMessage.value = message;
+    }
+  } finally {
+    isSaving.value = false;
+  }
 };
 
 const createStore = async () => {
@@ -452,9 +537,20 @@ const openAuth = (register = false) => {
   errorMessage.value = '';
 };
 
+const syncCheckoutRoute = () => {
+  checkoutOpen.value = window.location.pathname === '/checkout';
+  if (!checkoutOpen.value) {
+    checkoutSuccess.value = false;
+    errorMessage.value = '';
+  }
+};
+
 onMounted(async () => {
+  window.addEventListener('popstate', syncCheckoutRoute);
   await Promise.all([loadCatalog(), loadSession()]);
 });
+
+onBeforeUnmount(() => window.removeEventListener('popstate', syncCheckoutRoute));
 </script>
 
 <template>
@@ -481,14 +577,14 @@ onMounted(async () => {
           <span class="logout-label">Salir</span>
         </button>
         <button v-else class="sign-in-button" type="button" @click="openAuth()">Ingresar</button>
-        <button class="header-cart" type="button" aria-label="Ver pedido" @click="cartOpen = true">
+        <button class="header-cart" type="button" aria-label="Ir al checkout" @click="startCheckout">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.2 10.1a2 2 0 0 0 2 1.6h8.9a2 2 0 0 0 1.9-1.4L22 8H6"></path><circle cx="10" cy="20" r="1"></circle><circle cx="18" cy="20" r="1"></circle></svg>
           <span v-if="cartCount" class="cart-count">{{ cartCount }}</span>
         </button>
       </div>
     </header>
 
-    <main>
+    <main v-if="!checkoutOpen">
       <section class="hero">
         <div class="hero-copy">
           <span class="eyebrow"><span class="live-dot"></span> LO LOCAL, MÁS CERCA</span>
@@ -611,12 +707,14 @@ onMounted(async () => {
             <div class="product-image" :class="`product-image-${index % 5}`">
               <span class="product-art" aria-hidden="true">{{ ['✿', '◈', '☼', '❋', '✳'][index % 5] }}</span>
               <button
+                v-if="!isOwnProduct(product)"
                 class="add-button"
                 type="button"
                 :aria-label="`Agregar ${product.nombre} al pedido`"
-                :disabled="quantityInCart(product.id) >= product.stock"
+                :disabled="product.stock <= 0 || quantityInCart(product.id) >= product.stock"
                 @click="addToCart(product)"
               >+</button>
+              <span v-else class="own-product-label">Tu tienda</span>
             </div>
           </article>
         </div>
@@ -640,8 +738,61 @@ onMounted(async () => {
       </footer>
     </main>
 
+    <main v-else class="checkout-page">
+      <button class="text-button checkout-back" type="button" @click="returnToStore">
+        ← Volver a la tienda
+      </button>
+      <section v-if="checkoutSuccess" class="checkout-result" role="status">
+        <span class="checkout-result-icon">✓</span>
+        <span class="section-kicker">PEDIDO CONFIRMADO</span>
+        <h1>¡Gracias por tu compra!</h1>
+        <p>Se ha realizado el pago correctamente, pronto le llegara una factura a su correo</p>
+        <button class="primary-button" type="button" @click="returnToStore">Seguir explorando <span>→</span></button>
+      </section>
+      <section v-else-if="!cartCount" class="checkout-result">
+        <span class="checkout-result-icon">🛍</span>
+        <span class="section-kicker">TU PEDIDO</span>
+        <h1>El carrito está vacío.</h1>
+        <p>Explorá las tiendas del barrio y agregá productos para continuar.</p>
+        <button class="primary-button" type="button" @click="returnToStore">Volver a la tienda <span>→</span></button>
+      </section>
+      <section v-else class="checkout-layout">
+        <div class="checkout-heading">
+          <span class="section-kicker">UN ÚLTIMO PASO</span>
+          <h1>Finalizá tu pedido<span class="heading-period">.</span></h1>
+          <p>Completá tus datos para confirmar la compra.</p>
+        </div>
+        <div class="checkout-columns">
+          <form class="checkout-card dialog-form" @submit.prevent="submitCheckout">
+            <h2>Datos de entrega</h2>
+            <div class="form-row">
+              <label>Nombre<input v-model.trim="checkoutForm.nombre" autocomplete="given-name" required /></label>
+              <label>Apellido<input v-model.trim="checkoutForm.apellido" autocomplete="family-name" required /></label>
+            </div>
+            <label>Dirección<input v-model.trim="checkoutForm.direccion" autocomplete="street-address" required /></label>
+            <label>Código postal<input v-model.trim="checkoutForm.codigoPostal" autocomplete="postal-code" required /></label>
+            <p v-if="errorMessage" class="form-error" role="alert">{{ errorMessage }}</p>
+            <button class="primary-button form-submit" type="submit" :disabled="!checkoutReady || isSaving">
+              {{ isSaving ? 'Procesando pago…' : 'Pagar' }} <span>→</span>
+            </button>
+          </form>
+          <aside class="checkout-card checkout-summary">
+            <h2>Tu pedido</h2>
+            <article v-for="item in cart" :key="item.id" class="checkout-line">
+              <div class="checkout-line-copy">
+                <strong>{{ item.nombre }} <span>× {{ item.quantity }}</span></strong>
+                <small>{{ item.storeName }}</small>
+              </div>
+              <strong>{{ formatPrice(item.precio * item.quantity) }}</strong>
+            </article>
+            <div class="cart-subtotal"><span>Total</span><strong>{{ formatPrice(cartTotal) }}</strong></div>
+          </aside>
+        </div>
+      </section>
+    </main>
+
     <Transition name="slide-up">
-      <div v-if="cartCount" class="sticky-cart">
+      <div v-if="cartCount && !checkoutOpen" class="sticky-cart">
         <button class="cart-summary" type="button" @click="cartOpen = true">
           <span class="cart-icon-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.2 10.1a2 2 0 0 0 2 1.6h8.9a2 2 0 0 0 1.9-1.4L22 8H6"></path><circle cx="10" cy="20" r="1"></circle><circle cx="18" cy="20" r="1"></circle></svg><b>{{ cartCount }}</b></span>
           <span class="cart-summary-copy"><strong>Tu pedido</strong><small>{{ cartCount }} {{ cartCount === 1 ? 'producto' : 'productos' }}</small></span>

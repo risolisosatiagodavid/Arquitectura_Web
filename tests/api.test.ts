@@ -76,14 +76,14 @@ const createTestStore = async (
   return await response.json() as { id: number };
 };
 
-const createTestProduct = async (user: AuthenticatedUser, storeId: number) => {
+const createTestProduct = async (user: AuthenticatedUser, storeId: number, stock = 8) => {
   const response = await authRequest(`/tiendas/${storeId}/productos`, user.token, {
     method: 'POST',
     body: JSON.stringify({
       nombre: 'Producto de prueba',
       descripcion: 'Descripcion del producto',
       precio: 1250,
-      stock: 8,
+      stock,
     }),
   });
   assert.equal(response.status, 201);
@@ -240,6 +240,112 @@ describe('Autenticacion', () => {
     });
 
     assert.equal(response.status, 401);
+  });
+});
+
+describe('Checkout', () => {
+  const submitCheckout = (user: AuthenticatedUser, items: Array<{ productId: number; quantity: number }>) =>
+    authRequest('/checkout', user.token, {
+      method: 'POST',
+      body: JSON.stringify({
+        nombre: 'Ana',
+        apellido: 'Pérez',
+        direccion: 'Calle 123',
+        codigoPostal: 'C1000',
+        items,
+      }),
+    });
+
+  it('confirma la compra y descuenta el stock solicitado', async () => {
+    const seller = await registerUser('checkout-seller');
+    const buyer = await registerUser('checkout-buyer');
+    const store = await createTestStore(seller, 'Tienda checkout');
+    const product = await createTestProduct(seller, store.id, 5);
+
+    const response = await submitCheckout(buyer, [{ productId: product.id, quantity: 2 }]);
+
+    assert.equal(response.status, 200);
+    const stock = await db.selectFrom('products').select('stock')
+      .where('id', '=', product.id).executeTakeFirstOrThrow();
+    assert.equal(stock.stock, 3);
+  });
+
+  it('rechaza la compra sin stock suficiente y no modifica inventario', async () => {
+    const seller = await registerUser('checkout-stock-seller');
+    const buyer = await registerUser('checkout-stock-buyer');
+    const store = await createTestStore(seller, 'Tienda stock checkout');
+    const product = await createTestProduct(seller, store.id, 1);
+
+    const response = await submitCheckout(buyer, [{ productId: product.id, quantity: 2 }]);
+
+    assert.equal(response.status, 409);
+    const stock = await db.selectFrom('products').select('stock')
+      .where('id', '=', product.id).executeTakeFirstOrThrow();
+    assert.equal(stock.stock, 1);
+  });
+
+  it('revierte todos los descuentos si falta stock en otro producto', async () => {
+    const seller = await registerUser('checkout-rollback-seller');
+    const buyer = await registerUser('checkout-rollback-buyer');
+    const firstStore = await createTestStore(seller, 'Tienda checkout rollback 1');
+    const secondStore = await createTestStore(seller, 'Tienda checkout rollback 2');
+    const firstProduct = await createTestProduct(seller, firstStore.id, 2);
+    const secondProduct = await createTestProduct(seller, secondStore.id, 1);
+
+    const response = await submitCheckout(buyer, [
+      { productId: firstProduct.id, quantity: 1 },
+      { productId: secondProduct.id, quantity: 2 },
+    ]);
+
+    assert.equal(response.status, 409);
+    const stocks = await db.selectFrom('products').select(['id', 'stock'])
+      .where('id', 'in', [firstProduct.id, secondProduct.id])
+      .orderBy('id')
+      .execute();
+    assert.deepEqual(stocks.map((product) => product.stock), [2, 1]);
+  });
+
+  it('no vende dos veces la última unidad en compras simultáneas', async () => {
+    const seller = await registerUser('checkout-race-seller');
+    const firstBuyer = await registerUser('checkout-race-buyer-1');
+    const secondBuyer = await registerUser('checkout-race-buyer-2');
+    const store = await createTestStore(seller, 'Tienda checkout simultáneo');
+    const product = await createTestProduct(seller, store.id, 1);
+
+    const responses = await Promise.all([
+      submitCheckout(firstBuyer, [{ productId: product.id, quantity: 1 }]),
+      submitCheckout(secondBuyer, [{ productId: product.id, quantity: 1 }]),
+    ]);
+
+    assert.deepEqual(responses.map((response) => response.status).sort(), [200, 409]);
+    const stock = await db.selectFrom('products').select('stock')
+      .where('id', '=', product.id).executeTakeFirstOrThrow();
+    assert.equal(stock.stock, 0);
+  });
+
+  it('impide comprar productos de la propia tienda', async () => {
+    const owner = await registerUser('checkout-own-store');
+    const store = await createTestStore(owner, 'Tienda propia checkout');
+    const product = await createTestProduct(owner, store.id);
+
+    const response = await submitCheckout(owner, [{ productId: product.id, quantity: 1 }]);
+
+    assert.equal(response.status, 403);
+  });
+
+  it('requiere autenticación y datos válidos', async () => {
+    const unauthenticated = await jsonRequest('/checkout', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    assert.equal(unauthenticated.status, 401);
+
+    const user = await registerUser('checkout-invalid');
+    const invalid = await authRequest('/checkout', user.token, {
+      method: 'POST',
+      body: JSON.stringify({ nombre: 'Ana', items: [{ productId: 1, quantity: 0 }] }),
+    });
+    assert.equal(invalid.status, 400);
   });
 });
 

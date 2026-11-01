@@ -5,6 +5,7 @@ import authRoutes from './routes/auth.routes.js';
 import storeRoutes from './routes/store.routes.js';
 import userRoutes from './routes/user.routes.js';
 import productRoutes from './routes/product.routes.js';
+import checkoutRoutes from './routes/checkout.routes.js';
 import { errorHandler, notFound } from './middlewares/error.middleware.js';
 
 const app = express();
@@ -15,6 +16,12 @@ app.use('/auth', authRoutes);
 app.use('/tiendas', storeRoutes);
 app.use('/productos', productRoutes);
 app.use('/usuarios', userRoutes);
+app.use('/checkout', checkoutRoutes);
+app.get('/checkout', (_request, response, next) => {
+  response.sendFile(path.resolve('frontend/dist/index.html'), (error) => {
+    if (error) next(error);
+  });
+});
 app.use(notFound);
 app.use(errorHandler);
 

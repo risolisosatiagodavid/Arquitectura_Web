@@ -730,6 +730,7 @@ onMounted(async () => {
       </label>
 
       <div class="top-actions">
+        <RouterLink v-if="currentUser" class="reports-link" to="/reportes">Reportes</RouterLink>
         <button v-if="currentUser" class="user-chip" type="button" @click="signOut">
           <span class="avatar">{{ currentUser.nombre.charAt(0).toUpperCase() }}</span>
           <span class="user-name">{{ currentUser.nombre.split(' ')[0] }}</span>

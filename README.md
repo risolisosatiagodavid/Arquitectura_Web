@@ -1,91 +1,141 @@
-# Mercado Ya — Trabajo Práctico Integrador de Arquitectura Web
+# Mercado Ya
 
-**Mercado Ya** es la aplicación web del Trabajo Práctico Integrador de la materia **Arquitectura Web** (Universidad de Palermo). El proyecto se enfoca en el diseño e implementación de servicios web, priorizando buenas prácticas de arquitectura y consideraciones de seguridad.
+Aplicación web de comercio local desarrollada para el Trabajo Práctico Integrador de Arquitectura Web de la Universidad de Palermo. Permite explorar tiendas y productos, administrar tiendas y catálogos propios y simular compras con validación de stock.
 
----
+## Funcionalidades
 
-## Tecnologías y Entorno
-- **Runtime:** Node.js (LTS)
-- **Lenguaje:** JavaScript / TypeScript
-- **Frontend:** Vue 3 + Vite
-- **Entorno de desarrollo:** Ubuntu 26.04 LTS en WSL2
+- Registro e inicio de sesión con cookie de sesión `HttpOnly`.
+- Catálogo de tiendas públicas, con filtros por nombre, zona y categoría.
+- Creación, edición y eliminación de tiendas propias.
+- Catálogo de productos por tienda, con creación, edición y eliminación para su dueño.
+- Carrito de compras del lado del cliente. No se pueden agregar productos de una tienda propia.
+- Checkout autenticado: solicita datos de entrega, verifica el stock y lo descuenta en una transacción. Si algún producto no tiene stock suficiente, no se completa la compra ni se descuenta stock.
+- Seed automático de cuentas, tiendas y productos de demostración al iniciar el servidor.
 
-## Mensajes de commit
+El checkout es una simulación: no se integra una pasarela de pago, no se persiste un historial de órdenes y no se envían facturas por correo. El mensaje de confirmación es únicamente informativo.
 
-El proyecto usa Commitizen para crear commits siguiendo Conventional Commits. Ejecutar:
+## Tecnologías
+
+- Node.js 22 y TypeScript.
+- Express para la API REST.
+- SQLite para persistencia, con Kysely como query builder y `better-sqlite3` como driver.
+- Vue 3 y Vite para el frontend.
+- Argon2 para hashes de contraseñas y JWT para sesiones.
+- Docker y Docker Compose para construcción y despliegue.
+
+## Requisitos
+
+- Node.js 22.x y npm.
+- Docker y Docker Compose, únicamente si se va a ejecutar con contenedores.
+
+## Configuración y ejecución local
+
+Desde la raíz del proyecto:
 
 ```bash
-git add <archivos>
-npm run commit
+npm ci
+cp .env.example .env
 ```
 
-El asistente solicita el tipo, alcance y descripción del cambio. Los tipos habituales son `feat` para funcionalidades, `fix` para correcciones, `docs` para documentación, `refactor` para refactorizaciones y `test` para pruebas. También se puede indicar un cambio incompatible (`breaking change`) desde las opciones del asistente.
+Configurar las variables de `.env`:
 
-El CI valida los mensajes de todos los commits de cada pull request con las reglas Conventional Commits.
+| Variable | Descripción | Valor de desarrollo |
+|---|---|---|
+| `PORT` | Puerto HTTP del backend | `8080` |
+| `JWT_SECRET` | Secreto usado para firmar los JWT | Generar uno aleatorio |
+| `DB_PATH` | Ruta del archivo SQLite | `data/arqweb.sqlite` |
+| `COOKIE_SECURE` | Requiere HTTPS para enviar la cookie | `false` para HTTP local |
 
-### Versionado SemVer
+Para generar un secreto:
 
-Al integrar commits a `main`, GitHub Actions ejecuta build y tests y luego `semantic-release` analiza los mensajes Conventional Commits para crear tags Git `vMAJOR.MINOR.PATCH` y una GitHub Release:
-
-- `fix:` y `perf:` incrementan la versión `PATCH`.
-- `feat:` incrementa `MINOR`.
-- Un cambio incompatible (`!` o pie `BREAKING CHANGE:`) incrementa `MAJOR`.
-- Otros tipos, como `docs:`, `test:` y `chore:`, no generan una versión por sí solos.
-
-El workflow usa `GITHUB_TOKEN`; no requiere secretos adicionales. La publicación a Docker Hub se configurará en el pipeline de CD por separado.
-
-## Ejecución con Docker
-
-La imagen usa tres etapas: `builder` compila TypeScript y las dependencias nativas; `development` corre con Node como usuario no root; y `production` usa una imagen Distroless con solo los archivos compilados y dependencias de producción.
-
-Crear un archivo `.env` en la raíz del proyecto:
-
-```env
-PORT=8080
-JWT_SECRET=una-clave-aleatoria-larga
-DB_PATH=data/arqweb.sqlite
-COOKIE_SECURE=false
+```bash
+openssl rand -base64 32
 ```
 
-No subir `.env` al repositorio. Para generar un secreto JWT, se puede usar `openssl rand -base64 32`.
-`COOKIE_SECURE=false` es solo para desarrollo local por HTTP. En un entorno publicado detrás de HTTPS, configurarlo como `true`; la cookie de sesión es `HttpOnly`, `SameSite=Lax` y expira junto con el JWT al cabo de una hora.
-
-### Desarrollo local
-
-En una terminal iniciar la API:
+No subir `.env` al repositorio. Para desarrollo local con frontend y backend separados, abrir dos terminales:
 
 ```bash
 npm run dev
 ```
 
-En otra terminal iniciar Vue:
-
 ```bash
 npm run frontend:dev
 ```
 
-Abrir `http://localhost:5173`. Vite reenvía las solicitudes de la API al servidor local en el puerto `8080`. La sesión se establece mediante una cookie `HttpOnly`; el frontend no lee ni almacena el JWT.
+Abrir <http://localhost:5173>. Vite sirve el frontend y reenvía al backend las rutas API, incluido `POST /checkout`; la página `GET /checkout` permanece en Vite para conservar el frontend de desarrollo. El servidor backend escucha en el puerto indicado por `PORT` (por defecto, `8080`).
 
-Para compilar frontend y API, ejecutar `npm run build`. Con Docker Compose, el frontend compilado y la API se sirven juntos desde `http://localhost:8080`.
+El backend crea las tablas y ejecuta el seed antes de empezar a escuchar. Para cargar manualmente los datos de demostración:
 
-### Producción con Docker Compose
+```bash
+npm run seed
+```
+
+El seed es idempotente: agrega usuarios, tiendas y productos faltantes sin restablecer las contraseñas ni sobrescribir productos existentes.
+
+## Cuentas y datos de demostración
+
+| Uso | Email | Contraseña |
+|---|---|---|
+| Comprador y dueño de una tienda | `demo@mercadoya.local` | `Demo1234!` |
+| Dueño de las otras tiendas | `tiendas@mercadoya.local` | `Tiendas1234!` |
+
+El seed incluye una tienda para cada una de las 15 categorías del catálogo y dos productos por tienda, con stocks de entre 0 y 10 unidades. La cuenta compradora es dueña de una tienda; puede administrarla y comprar productos de las tiendas restantes.
+
+Las credenciales son públicas y están destinadas a las demostraciones del trabajo práctico. No usarlas para información sensible. Si el email ya existe en la base, el seed conserva esa cuenta y su contraseña actual.
+
+## Scripts de npm
+
+| Script | Propósito |
+|---|---|
+| `npm run dev` | Ejecuta el backend en modo desarrollo con `tsx watch`. |
+| `npm run frontend:dev` | Inicia el servidor de desarrollo de Vite. |
+| `npm run build` | Valida y compila frontend y backend. |
+| `npm run frontend:build` | Valida tipos y compila el frontend. |
+| `npm start` | Ejecuta el backend compilado en `dist/`; requiere correr `npm run build` antes. |
+| `npm test` | Ejecuta las pruebas HTTP automatizadas. |
+| `npm run seed` | Crea las tablas y agrega los datos de demostración faltantes. |
+| `npm run commit` | Inicia Commitizen para preparar un commit Conventional Commit. |
+| `npm run lint:commits` | Valida mensajes de commit con Commitlint. |
+| `npm run release` | Ejecuta semantic-release; el workflow lo usa al integrar cambios a `main`. |
+
+## Pruebas y CI
+
+Las pruebas de endpoints están en `tests/api.test.ts` y se ejecutan con:
+
+```bash
+npm test
+```
+
+Validar frontend y backend con:
+
+```bash
+npm run build
+```
+
+GitHub Actions ejecuta instalación reproducible (`npm ci`), validación de mensajes de commit, build y pruebas en pull requests dirigidos a `main`. Al integrar cambios a `main`, el workflow de release vuelve a compilar y probar antes de ejecutar semantic-release.
+
+## Ejecución con Docker Compose
+
+Crear `.env` en la raíz y configurar `JWT_SECRET`. Para desarrollo por HTTP, `COOKIE_SECURE=false`:
 
 ```bash
 docker compose up --build -d
 ```
 
-La aplicación Vue y la API quedan disponibles en `http://localhost:8080`. SQLite se guarda en el volumen Docker `sqlite-data` y persiste aunque se reemplace el contenedor. Al publicarla con HTTPS, configurar `COOKIE_SECURE=true`.
-
-Para ver los logs y detener la aplicación:
+La aplicación queda disponible en <http://localhost:8080>. El contenedor ejecuta el seed al iniciar. SQLite se almacena en el volumen persistente `sqlite-data`; reiniciar o recrear el contenedor conserva los datos.
 
 ```bash
 docker compose logs -f api
 docker compose down
 ```
 
-### Desarrollo con Docker
+Para borrar también los datos persistidos, se puede eliminar el volumen con `docker compose down -v`; esto borra la base SQLite del entorno.
 
-Construir la etapa de desarrollo y ejecutarla con el código del proyecto:
+En un despliegue detrás de HTTPS, configurar `COOKIE_SECURE=true`. La cookie de sesión es `HttpOnly`, `SameSite=Lax` y expira junto con el JWT al cabo de una hora.
+
+La imagen Docker tiene tres etapas: `builder` compila el proyecto, `development` ejecuta el backend con Node como usuario no root y `production` utiliza una imagen Distroless con los archivos compilados y las dependencias de producción.
+
+### Ejecutar la etapa Docker de desarrollo
 
 ```bash
 docker build --target development -t arqweb:development .
@@ -95,190 +145,174 @@ docker run --rm -p 8080:8080 --env-file .env \
   arqweb:development
 ```
 
-La etapa de desarrollo ejecuta `npm run dev` con `tsx watch` como usuario no root.
+## API REST
 
----
+Los endpoints de API usan JSON. En las rutas protegidas se acepta la cookie de sesión emitida por registro o login. Los errores JSON usan el formato `{ "error": "..." }`.
 
-# Entregas y Modulos
+### Autenticación
 
- # 1. **Servidor HTTP:** Servidor implementado utilizando el modulo node:http sin utilizar frameworks externos, con los siguientes endpoints:
+| Método y ruta | Descripción | Respuestas |
+|---|---|---|
+| `POST /auth/registro` | Registra una cuenta e inicia sesión. | `201`, `400`, `409`, `500` |
+| `POST /auth/login` | Valida credenciales e inicia sesión. | `200`, `400`, `401`, `500` |
+| `GET /auth/sesion` | Devuelve la cuenta de la sesión actual. | `200`, `401` |
+| `POST /auth/logout` | Elimina la cookie de sesión. | `204` |
 
+`POST /auth/registro`:
 
-```http
-GET /            //Retorna 'Servidor HTTP funcionando correctamente'
-POST /archivo    //Retorna la cantidad de bytes del archivo
-```
-* Cualquier otra ruta o método retorna 404
-     
-<br>
-
-  *   **Ejecución**
-```bash
-node server.js
-```
-<br>
-
-* **Pruebas**
-
-```bash
-# Probar GET
-curl -i http://localhost:8080/
-
-# Probar POST con archivo
-curl -i -X POST --data-binary @archivo_de_prueba.txt http://localhost:8080/archivo
-
-# Probar 404 (Ruta invalida)
-curl -i http://localhost:8080/ruta-invalida
-```
-
----
- # 2. Documentacion de la API
-
-### Errores
-
-Las respuestas de error usan el formato JSON `{ "error": "..." }`. Un JSON malformado devuelve `400`, una ruta inexistente devuelve `404`, un cuerpo demasiado grande devuelve `413` y los errores inesperados devuelven `500` sin exponer detalles internos. Los detalles de los errores inesperados se registran en el servidor.
-
-### Autenticación y Usuarios
-```http
-POST  /auth/registro                  // [201, 400, 409] Registra un usuario en la plataforma
-POST  /auth/login                     // [200, 400, 401] Autentica credenciales y establece una cookie de sesión
-GET   /auth/sesion                    // [200, 401] Consulta la sesión autenticada actual
-POST  /auth/logout                    // [204] Cierra la sesión eliminando la cookie
-GET   /usuarios/:id                   // [200, 401, 403, 404] Obtiene datos del perfil del usuario
-PATCH /usuarios/:id                   // [200, 400, 409] Actualiza datos personales o de contacto
-```
-El JWT se entrega exclusivamente en una cookie `HttpOnly`, `SameSite=Lax`, con expiración de una hora. En producción, la cookie usa el atributo `Secure`.
-*Payloads requeridos:*
-
-* **POST /auth/registro**:
 ```json
 {
-  "nombre": "...",
-  "email": "...",
-  "password": "...",
-  "domicilio": "..."
+  "nombre": "Ana Pérez",
+  "email": "ana@example.com",
+  "password": "una-clave",
+  "domicilio": "Buenos Aires"
 }
 ```
 
-* **POST /auth/login**:
+`POST /auth/login`:
+
 ```json
 {
-  "email": "...",
-  "password": "..."
+  "email": "ana@example.com",
+  "password": "una-clave"
 }
 ```
 
-* **PATCH /usuarios/:id**:
+La contraseña se persiste como hash Argon2, no como texto plano. Registro y login emiten una cookie `HttpOnly`; el JWT no se devuelve en el cuerpo JSON.
+
+### Usuarios
+
+Todas las rutas requieren autenticación. Cada usuario solo puede consultar o modificar su propia cuenta.
+
+| Método y ruta | Descripción | Respuestas |
+|---|---|---|
+| `GET /usuarios/:id` | Consulta el perfil del usuario autenticado. | `200`, `401`, `403`, `404` |
+| `PATCH /usuarios/:id` | Actualiza datos de perfil. | `200`, `400`, `401`, `403`, `404` |
+
+`PATCH /usuarios/:id` acepta uno o más de estos campos:
+
 ```json
 {
-  "username": "...",
-  "telefono": "...",
-  "domicilio": "..."
+  "username": "ana",
+  "telefono": "1144445555",
+  "domicilio": "Palermo, Buenos Aires"
 }
 ```
-
----
 
 ### Tiendas
-```http
-GET    /tiendas                       // [200, 400] Lista tiendas (filtros por nombre, zona o categoría)[cite: 1]
-GET    /tiendas/:id                   // [200, 403, 404] Detalle e información de una tienda específica[cite: 1]
-POST   /tiendas                       // [201, 400, 401, 409] Crea una tienda (usuario autenticado como dueño)[cite: 1]
-PATCH  /tiendas/:id                   // [200, 400, 403, 404] Modifica datos de la tienda (dueño o administradores)[cite: 1]
-DELETE /tiendas/:id                   // [204, 403, 404] Elimina una tienda del sistema (solo dueño)[cite: 1]
-```
-*Payloads requeridos:*
 
-* **POST /tiendas**:
+`GET /tiendas` lista tiendas públicas. Filtros opcionales: `nombre`, `zona` y `categoria`, por ejemplo `GET /tiendas?categoria=Gastronomía&zona=Palermo`.
+
+| Método y ruta | Descripción | Respuestas |
+|---|---|---|
+| `GET /tiendas` | Lista tiendas públicas y permite filtrar el catálogo. | `200`, `400` |
+| `GET /tiendas/:id` | Consulta una tienda; las privadas solo son visibles para su dueño. | `200`, `401`, `403`, `404` |
+| `POST /tiendas` | Crea una tienda para el usuario autenticado. | `201`, `400`, `401`, `409` |
+| `PATCH /tiendas/:id` | Actualiza datos de una tienda propia. | `200`, `400`, `401`, `403`, `404` |
+| `DELETE /tiendas/:id` | Elimina una tienda propia. | `204`, `401`, `403`, `404` |
+
+`POST /tiendas`:
+
 ```json
 {
-  "storename": "...",
-  "descripcion": "...",
-  "owner": 0,
-  "visibilidad": "..."
+  "storename": "Mi tienda",
+  "descripcion": "Productos hechos en el barrio",
+  "owner": 1,
+  "visibilidad": "publica",
+  "categoria": "Regalos",
+  "zona": "Palermo",
+  "telefono": "1144445555"
 }
 ```
 
-* **PATCH /tiendas/:id**:
+`owner` debe coincidir con el ID del usuario autenticado. `visibilidad` debe ser `publica` o `privada`. `categoria`, `zona` y `telefono` son opcionales.
+
+`PATCH /tiendas/:id` acepta uno o más campos:
+
 ```json
 {
-  "nombre": "...",
-  "descripcion": "...",
-  "telefono": "..."
+  "nombre": "Nuevo nombre",
+  "descripcion": "Nueva descripción",
+  "categoria": "Hogar",
+  "zona": "Belgrano",
+  "telefono": "1144445555",
+  "visibilidad": "publica"
 }
 ```
 
----
+Los campos de texto enviados deben ser textos no vacíos. Solo el dueño puede crear productos, modificar o eliminar productos, y modificar o eliminar su tienda.
 
-### Catálogo de Productos
-```http
-GET    /tiendas/:id/productos         // [200, 403, 404] Obtiene el catálogo visible de una tienda
-POST   /tiendas/:id/productos         // [201, 400, 401, 403, 404] Da de alta un nuevo producto dentro de la tienda (solo dueño)
-GET    /productos/:id                 // [200, 403, 404] Detalle y datos comerciales de un producto visible
-PATCH  /productos/:id                 // [200, 400, 401, 403, 404] Actualiza precio o inventario de un producto (solo dueño)
-DELETE /productos/:id                 // [204, 401, 403, 404] Elimina un producto del catálogo (solo dueño)
-```
-*Payloads requeridos:*
+### Productos
 
-* **POST /tiendas/:id/productos**:
+| Método y ruta | Descripción | Respuestas |
+|---|---|---|
+| `GET /tiendas/:id/productos` | Lista los productos visibles de una tienda. | `200`, `401`, `403`, `404` |
+| `POST /tiendas/:id/productos` | Crea un producto en una tienda propia. | `201`, `400`, `401`, `403`, `404` |
+| `GET /productos/:id` | Consulta un producto visible. | `200`, `401`, `403`, `404` |
+| `PATCH /productos/:id` | Modifica uno o más campos de un producto propio. | `200`, `400`, `401`, `403`, `404` |
+| `DELETE /productos/:id` | Elimina un producto propio. | `204`, `401`, `403`, `404` |
+
+`POST /tiendas/:id/productos`:
+
 ```json
 {
-  "nombre": "...",
-  "descripcion": "...",
-  "precio": 0.0,
-  "stock": 0
-}
-```
-`nombre` y `descripcion` deben ser textos no vacios, `precio` un numero no negativo y `stock` un entero no negativo. Solo el dueño de la tienda puede crear productos.
-
-* **PATCH /productos/:id**:
-```json
-{
-  "nombre": "...",
-  "descripcion": "...",
-  "precio": 0.0,
-  "stock": 0
-}
-```
-La actualización acepta uno o más campos. `nombre` y `descripcion` deben ser textos no vacios, `precio` un numero no negativo y `stock` un entero no negativo. Solo el dueño de la tienda puede modificar o eliminar sus productos. Los productos de tiendas privadas solo son visibles para su dueño.
-
----
-
-### Carrito de Compras
-```http
-GET    /carrito                       // [200, 401] Consulta items, cantidades y subtotal acumulado
-POST   /carrito/items                 // [200, 400, 404] Agrega o actualiza la cantidad de un producto
-DELETE /carrito/items/:producto_id    // [204, 401, 404] Quita un producto específico del carrito
-```
-*Payloads requeridos:*
-
-* **POST /carrito/items**:
-```json
-{
-  "producto_id": 0,
-  "cantidad": 0
+  "nombre": "Cuaderno artesanal",
+  "descripcion": "Cuaderno de 80 hojas",
+  "precio": 5600,
+  "stock": 7
 }
 ```
 
----
+`PATCH /productos/:id` acepta uno o más campos con la misma forma. `nombre` y `descripcion` deben ser textos no vacíos; `precio` debe ser un número no negativo y `stock` un entero no negativo. Las tiendas privadas y sus productos solo son visibles para su dueño.
 
-### Compras y Órdenes
-```http
-POST  /compras                        // [201, 400, 409] Procesa el carrito, valida stock y genera la orden
-GET   /compras                        // [200, 401] Historial de compras del usuario autenticado
-GET   /compras/:id                    // [200, 403, 404] Detalle exhaustivo de una compra puntual
-```
-*Payloads requeridos:*
+### Checkout
 
-* **POST /compras**:
+| Método y ruta | Descripción | Respuestas |
+|---|---|---|
+| `POST /checkout` | Valida los datos de entrega y el stock, y descuenta las unidades en una transacción. Requiere sesión. | `200`, `400`, `401`, `403`, `404`, `409` |
+
+Payload:
+
 ```json
 {
-  "direccion_envio": "...",
-  "metodo_pago": "..."
+  "nombre": "Ana",
+  "apellido": "Pérez",
+  "direccion": "Calle 123",
+  "codigoPostal": "C1000",
+  "items": [
+    { "productId": 10, "quantity": 2 }
+  ]
 }
 ```
----
+
+`items` debe contener entre 1 y 100 productos, sin IDs duplicados y con cantidades enteras positivas. `403` indica que se intentó comprar un producto de una tienda propia; `404`, que algún producto no existe o ya no está disponible; `409`, que no hay stock suficiente. Si falla un artículo, la transacción revierte los descuentos de todos los artículos.
+
+### Respuestas de error generales
+
+- `400`: JSON malformado, cuerpo inválido o filtros incorrectos.
+- `401`: sesión requerida o inválida.
+- `403`: el usuario autenticado no tiene permiso para el recurso.
+- `404`: recurso o ruta inexistente.
+- `409`: email duplicado, nombre de tienda duplicado o stock insuficiente.
+- `413`: cuerpo de solicitud demasiado grande.
+- `500`: error interno; los detalles se registran en el servidor y no se incluyen en la respuesta.
+
+### Rutas de interfaz
+
+| Método y ruta | Descripción |
+|---|---|
+| `GET /` | Sirve la aplicación Vue y el catálogo principal. |
+| `GET /checkout` | Sirve la pantalla de checkout. |
+
+Estas rutas sirven páginas HTML; no son endpoints de API.
+
+
+## Convenciones de commits y releases
+
+El proyecto usa Conventional Commits. Se puede preparar un mensaje interactivo con `npm run commit`. Commitlint valida los mensajes durante el CI. Al integrar cambios a `main`, semantic-release calcula la versión: `fix:` y `perf:` incrementan PATCH, `feat:` incrementa MINOR, y `!` o el pie `BREAKING CHANGE:` incrementan MAJOR. Los commits `docs:`, `test:` y `chore:` no generan una versión por sí solos.
+
 ## Autor
-* **Estudiante**: Tiago Risoli
-* **Institucion**: Universidad de Palermo
-* **Carrera**: Lic. En Ciberseguridad
+
+- **Estudiante:** Tiago Risoli
+- **Institución:** Universidad de Palermo
+- **Carrera:** Licenciatura en Ciberseguridad

@@ -15,6 +15,10 @@ export default defineConfig({
       '/tiendas': process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:8080',
       '/productos': process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:8080',
       '/usuarios': process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:8080',
+      '/checkout': {
+        target: process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:8080',
+        bypass: (request) => request.method === 'POST' ? undefined : request.url,
+      },
     },
   },
   build: {

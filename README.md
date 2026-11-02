@@ -62,7 +62,7 @@ npm run dev
 npm run frontend:dev
 ```
 
-Abrir <http://localhost:5173>. Vite sirve el frontend y reenvía al backend las rutas API, incluido `POST /checkout`; la página `GET /checkout` permanece en Vite para conservar el frontend de desarrollo. El servidor backend escucha en el puerto indicado por `PORT` (por defecto, `8080`).
+Abrir <http://localhost:5173>. Vite sirve el frontend y reenvía las solicitudes bajo `/api` al backend. La interfaz utiliza las rutas `/tiendas`, `/tiendas/:id` y `/checkout`; se pueden abrir directamente o recargar. La API REST está versionada bajo `/api/v1`. El servidor backend escucha en el puerto indicado por `PORT` (por defecto, `8080`).
 
 El backend crea las tablas y ejecuta el seed antes de empezar a escuchar. Para cargar manualmente los datos de demostración:
 
@@ -147,18 +147,18 @@ docker run --rm -p 8080:8080 --env-file .env \
 
 ## API REST
 
-Los endpoints de API usan JSON. En las rutas protegidas se acepta la cookie de sesión emitida por registro o login. Los errores JSON usan el formato `{ "error": "..." }`.
+Los endpoints de API usan el prefijo `/api/v1` y aceptan JSON. En las rutas protegidas se acepta la cookie de sesión emitida por registro o login. Los errores JSON usan el formato `{ "error": "..." }`.
 
 ### Autenticación
 
 | Método y ruta | Descripción | Respuestas |
 |---|---|---|
-| `POST /auth/registro` | Registra una cuenta e inicia sesión. | `201`, `400`, `409`, `500` |
-| `POST /auth/login` | Valida credenciales e inicia sesión. | `200`, `400`, `401`, `500` |
-| `GET /auth/sesion` | Devuelve la cuenta de la sesión actual. | `200`, `401` |
-| `POST /auth/logout` | Elimina la cookie de sesión. | `204` |
+| `POST /api/v1/auth/registro` | Registra una cuenta e inicia sesión. | `201`, `400`, `409`, `500` |
+| `POST /api/v1/auth/login` | Valida credenciales e inicia sesión. | `200`, `400`, `401`, `500` |
+| `GET /api/v1/auth/sesion` | Devuelve la cuenta de la sesión actual. | `200`, `401` |
+| `POST /api/v1/auth/logout` | Elimina la cookie de sesión. | `204` |
 
-`POST /auth/registro`:
+`POST /api/v1/auth/registro`:
 
 ```json
 {
@@ -169,7 +169,7 @@ Los endpoints de API usan JSON. En las rutas protegidas se acepta la cookie de s
 }
 ```
 
-`POST /auth/login`:
+`POST /api/v1/auth/login`:
 
 ```json
 {
@@ -186,10 +186,10 @@ Todas las rutas requieren autenticación. Cada usuario solo puede consultar o mo
 
 | Método y ruta | Descripción | Respuestas |
 |---|---|---|
-| `GET /usuarios/:id` | Consulta el perfil del usuario autenticado. | `200`, `401`, `403`, `404` |
-| `PATCH /usuarios/:id` | Actualiza datos de perfil. | `200`, `400`, `401`, `403`, `404` |
+| `GET /api/v1/usuarios/:id` | Consulta el perfil del usuario autenticado. | `200`, `401`, `403`, `404` |
+| `PATCH /api/v1/usuarios/:id` | Actualiza datos de perfil. | `200`, `400`, `401`, `403`, `404` |
 
-`PATCH /usuarios/:id` acepta uno o más de estos campos:
+`PATCH /api/v1/usuarios/:id` acepta uno o más de estos campos:
 
 ```json
 {
@@ -201,17 +201,17 @@ Todas las rutas requieren autenticación. Cada usuario solo puede consultar o mo
 
 ### Tiendas
 
-`GET /tiendas` lista tiendas públicas. Filtros opcionales: `nombre`, `zona` y `categoria`, por ejemplo `GET /tiendas?categoria=Gastronomía&zona=Palermo`.
+`GET /api/v1/tiendas` lista tiendas públicas. Filtros opcionales: `nombre`, `zona` y `categoria`, por ejemplo `GET /api/v1/tiendas?categoria=Gastronomía&zona=Palermo`.
 
 | Método y ruta | Descripción | Respuestas |
 |---|---|---|
-| `GET /tiendas` | Lista tiendas públicas y permite filtrar el catálogo. | `200`, `400` |
-| `GET /tiendas/:id` | Consulta una tienda; las privadas solo son visibles para su dueño. | `200`, `401`, `403`, `404` |
-| `POST /tiendas` | Crea una tienda para el usuario autenticado. | `201`, `400`, `401`, `409` |
-| `PATCH /tiendas/:id` | Actualiza datos de una tienda propia. | `200`, `400`, `401`, `403`, `404` |
-| `DELETE /tiendas/:id` | Elimina una tienda propia. | `204`, `401`, `403`, `404` |
+| `GET /api/v1/tiendas` | Lista tiendas públicas y permite filtrar el catálogo. | `200`, `400` |
+| `GET /api/v1/tiendas/:id` | Consulta una tienda; las privadas solo son visibles para su dueño. | `200`, `401`, `403`, `404` |
+| `POST /api/v1/tiendas` | Crea una tienda para el usuario autenticado. | `201`, `400`, `401`, `409` |
+| `PATCH /api/v1/tiendas/:id` | Actualiza datos de una tienda propia. | `200`, `400`, `401`, `403`, `404` |
+| `DELETE /api/v1/tiendas/:id` | Elimina una tienda propia. | `204`, `401`, `403`, `404` |
 
-`POST /tiendas`:
+`POST /api/v1/tiendas`:
 
 ```json
 {
@@ -227,7 +227,7 @@ Todas las rutas requieren autenticación. Cada usuario solo puede consultar o mo
 
 `owner` debe coincidir con el ID del usuario autenticado. `visibilidad` debe ser `publica` o `privada`. `categoria`, `zona` y `telefono` son opcionales.
 
-`PATCH /tiendas/:id` acepta uno o más campos:
+`PATCH /api/v1/tiendas/:id` acepta uno o más campos:
 
 ```json
 {
@@ -246,13 +246,13 @@ Los campos de texto enviados deben ser textos no vacíos. Solo el dueño puede c
 
 | Método y ruta | Descripción | Respuestas |
 |---|---|---|
-| `GET /tiendas/:id/productos` | Lista los productos visibles de una tienda. | `200`, `401`, `403`, `404` |
-| `POST /tiendas/:id/productos` | Crea un producto en una tienda propia. | `201`, `400`, `401`, `403`, `404` |
-| `GET /productos/:id` | Consulta un producto visible. | `200`, `401`, `403`, `404` |
-| `PATCH /productos/:id` | Modifica uno o más campos de un producto propio. | `200`, `400`, `401`, `403`, `404` |
-| `DELETE /productos/:id` | Elimina un producto propio. | `204`, `401`, `403`, `404` |
+| `GET /api/v1/tiendas/:id/productos` | Lista los productos visibles de una tienda. | `200`, `401`, `403`, `404` |
+| `POST /api/v1/tiendas/:id/productos` | Crea un producto en una tienda propia. | `201`, `400`, `401`, `403`, `404` |
+| `GET /api/v1/productos/:id` | Consulta un producto visible. | `200`, `401`, `403`, `404` |
+| `PATCH /api/v1/productos/:id` | Modifica uno o más campos de un producto propio. | `200`, `400`, `401`, `403`, `404` |
+| `DELETE /api/v1/productos/:id` | Elimina un producto propio. | `204`, `401`, `403`, `404` |
 
-`POST /tiendas/:id/productos`:
+`POST /api/v1/tiendas/:id/productos`:
 
 ```json
 {
@@ -263,13 +263,13 @@ Los campos de texto enviados deben ser textos no vacíos. Solo el dueño puede c
 }
 ```
 
-`PATCH /productos/:id` acepta uno o más campos con la misma forma. `nombre` y `descripcion` deben ser textos no vacíos; `precio` debe ser un número no negativo y `stock` un entero no negativo. Las tiendas privadas y sus productos solo son visibles para su dueño.
+`PATCH /api/v1/productos/:id` acepta uno o más campos con la misma forma. `nombre` y `descripcion` deben ser textos no vacíos; `precio` debe ser un número no negativo y `stock` un entero no negativo. Las tiendas privadas y sus productos solo son visibles para su dueño.
 
 ### Checkout
 
 | Método y ruta | Descripción | Respuestas |
 |---|---|---|
-| `POST /checkout` | Valida los datos de entrega y el stock, y descuenta las unidades en una transacción. Requiere sesión. | `200`, `400`, `401`, `403`, `404`, `409` |
+| `POST /api/v1/checkout` | Valida los datos de entrega y el stock, y descuenta las unidades en una transacción. Requiere sesión. | `200`, `400`, `401`, `403`, `404`, `409` |
 
 Payload:
 
@@ -301,10 +301,12 @@ Payload:
 
 | Método y ruta | Descripción |
 |---|---|
-| `GET /` | Sirve la aplicación Vue y el catálogo principal. |
+| `GET /` | Redirige a la pantalla de tiendas. |
+| `GET /tiendas` | Sirve el catálogo de tiendas. |
+| `GET /tiendas/:id` | Sirve los productos de una tienda. |
 | `GET /checkout` | Sirve la pantalla de checkout. |
 
-Estas rutas sirven páginas HTML; no son endpoints de API.
+Estas rutas sirven páginas HTML; no son endpoints de API. Las rutas de interfaz se pueden abrir o recargar directamente.
 
 
 ## Convenciones de commits y releases

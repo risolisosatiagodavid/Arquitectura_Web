@@ -19,7 +19,7 @@ const jsonRequest = async (path: string, options: RequestInit = {}) => {
   const headers = new Headers(options.headers);
   headers.set('content-type', 'application/json');
 
-  return fetch(`${baseUrl}${path}`, {
+  return fetch(`${baseUrl}/api/v1${path}`, {
     ...options,
     headers,
   });
@@ -105,6 +105,22 @@ beforeEach(async () => {
 });
 
 after(() => server.close());
+
+describe('Rutas de la API', () => {
+  it('getStores_AtVersionedRoute_ReturnsJson', async () => {
+    const response = await jsonRequest('/tiendas');
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), []);
+  });
+
+  it('getUnknownApiRoute_DoesNotMatchFrontendFallback_ReturnsNotFound', async () => {
+    const response = await jsonRequest('/ruta-inexistente');
+
+    assert.equal(response.status, 404);
+    assert.equal(response.headers.get('content-type')?.includes('application/json'), true);
+  });
+});
 
 describe('Autenticacion', () => {
   it('login_WithMalformedJson_ReturnsBadRequest', async () => {

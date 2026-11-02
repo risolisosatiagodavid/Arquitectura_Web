@@ -6,6 +6,7 @@ import storeRoutes from './routes/store.routes.js';
 import userRoutes from './routes/user.routes.js';
 import productRoutes from './routes/product.routes.js';
 import checkoutRoutes from './routes/checkout.routes.js';
+import reportRoutes from './routes/report.routes.js';
 import { errorHandler, notFound } from './middlewares/error.middleware.js';
 
 const app = express();
@@ -16,8 +17,9 @@ app.use('/api/v1/tiendas', storeRoutes);
 app.use('/api/v1/productos', productRoutes);
 app.use('/api/v1/usuarios', userRoutes);
 app.use('/api/v1/checkout', checkoutRoutes);
+app.use('/api/v1/reportes', reportRoutes);
 app.get('/', (_request, response) => response.redirect('/tiendas'));
-app.get(['/tiendas', '/tiendas/:storeId', '/checkout'], (_request, response, next) => {
+app.get(['/tiendas', '/tiendas/:storeId', '/checkout', '/reportes'], (_request, response, next) => {
   response.sendFile(path.resolve('frontend/dist/index.html'), (error) => {
     if (error) next(error);
   });

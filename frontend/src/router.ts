@@ -9,6 +9,7 @@ const router = createRouter({
     { path: '/tiendas', name: 'stores', component: StorefrontPage },
     { path: '/tiendas/:storeId', name: 'store', component: StorefrontPage },
     { path: '/checkout', name: 'checkout', component: StorefrontPage },
+    { path: '/reportes', name: 'reports', component: () => import('./ReportsPage.vue') },
     { path: '/:pathMatch(.*)*', redirect: '/tiendas' },
   ],
 });

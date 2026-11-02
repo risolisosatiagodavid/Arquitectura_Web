@@ -10,6 +10,7 @@ Aplicación web de comercio local desarrollada para el Trabajo Práctico Integra
 - Catálogo de productos por tienda, con creación, edición y eliminación para su dueño.
 - Carrito de compras del lado del cliente. No se pueden agregar productos de una tienda propia.
 - Checkout autenticado: solicita datos de entrega, verifica el stock y lo descuenta en una transacción. Si algún producto no tiene stock suficiente, no se completa la compra ni se descuenta stock.
+- Reporte de inventario por usuario con tiendas propias, productos, unidades disponibles, agotados y valor estimado del stock.
 - Seed automático de cuentas, tiendas y productos de demostración al iniciar el servidor.
 
 El checkout es una simulación: no se integra una pasarela de pago, no se persiste un historial de órdenes y no se envían facturas por correo. El mensaje de confirmación es únicamente informativo.
@@ -287,6 +288,14 @@ Payload:
 
 `items` debe contener entre 1 y 100 productos, sin IDs duplicados y con cantidades enteras positivas. `403` indica que se intentó comprar un producto de una tienda propia; `404`, que algún producto no existe o ya no está disponible; `409`, que no hay stock suficiente. Si falla un artículo, la transacción revierte los descuentos de todos los artículos.
 
+### Reportes
+
+| Método y ruta | Descripción | Respuestas |
+|---|---|---|
+| `GET /api/v1/reportes/inventario` | Devuelve el resumen de inventario y los productos de las tiendas del usuario autenticado. | `200`, `401` |
+
+El reporte incluye cantidades agregadas y el valor estimado del inventario (`precio × stock`), que no representa ventas ni ingresos. La pantalla está disponible en `/reportes` para usuarios con sesión iniciada.
+
 ### Respuestas de error generales
 
 - `400`: JSON malformado, cuerpo inválido o filtros incorrectos.
@@ -305,6 +314,7 @@ Payload:
 | `GET /tiendas` | Sirve el catálogo de tiendas. |
 | `GET /tiendas/:id` | Sirve los productos de una tienda. |
 | `GET /checkout` | Sirve la pantalla de checkout. |
+| `GET /reportes` | Sirve el panel de inventario. |
 
 Estas rutas sirven páginas HTML; no son endpoints de API. Las rutas de interfaz se pueden abrir o recargar directamente.
 
